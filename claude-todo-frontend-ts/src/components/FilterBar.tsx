@@ -56,7 +56,7 @@ export default function FilterBar({ filters, onChange }: Props) {
             key={opt.value}
             type="button"
             onClick={() =>
-              onChange({ ...filters, status: opt.value as Status | undefined })
+              onChange({ ...filters, status: (opt.value || undefined) as Status | undefined })
             }
             className={cn(
               "text-xs px-3 py-1.5 rounded-lg font-body transition-all duration-150",

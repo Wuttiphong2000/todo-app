@@ -1,58 +1,84 @@
 import { nanoid } from "nanoid";
-import { storageService } from "./storage.service.js";
+import { db } from "../db/database.js";
+import { AppError } from "../middlewares/error.middleware.js";
 import type { Tag, CreateTagDto, UpdateTagDto } from "../types/index.js";
- 
+
+// ── Row Type ──────────────────────────────────────────────────────────────────
+
+interface TagRow {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+function toTag(row: TagRow): Tag {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color,
+    createdAt: row.created_at,
+  };
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 class TagService {
   findAll(): Tag[] {
-    return storageService.getDb().tags;
+    return (
+      db
+        .prepare("SELECT * FROM tags ORDER BY created_at ASC")
+        .all() as TagRow[]
+    ).map(toTag);
   }
- 
+
   findById(id: string): Tag | undefined {
-    return storageService.getDb().tags.find((t) => t.id === id);
+    const row = db
+      .prepare("SELECT * FROM tags WHERE id = ?")
+      .get(id) as TagRow | undefined;
+    return row ? toTag(row) : undefined;
   }
- 
+
   create(dto: CreateTagDto): Tag {
-    const db = storageService.getDb();
- 
-    const tag: Tag = {
-      id: nanoid(),
-      name: dto.name,
-      color: dto.color,
-      createdAt: new Date().toISOString(),
-    };
- 
-    db.tags.push(tag);
-    storageService.save(db);
-    return tag;
+    const id = nanoid();
+    const createdAt = new Date().toISOString();
+    try {
+      db.prepare(
+        "INSERT INTO tags (id, name, color, created_at) VALUES (?, ?, ?, ?)"
+      ).run(id, dto.name, dto.color, createdAt);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "SQLITE_CONSTRAINT_UNIQUE") {
+        throw new AppError(409, "TAG_ALREADY_EXISTS", `Tag name "${dto.name}" already exists`);
+      }
+      throw err;
+    }
+    return { id, name: dto.name, color: dto.color, createdAt };
   }
- 
+
   update(id: string, dto: UpdateTagDto): Tag | undefined {
-    const db = storageService.getDb();
-    const index = db.tags.findIndex((t) => t.id === id);
-    if (index === -1) return undefined;
- 
-    db.tags[index] = { ...db.tags[index], ...dto };
-    storageService.save(db);
-    return db.tags[index];
+    const exists = db.prepare("SELECT id FROM tags WHERE id = ?").get(id);
+    if (!exists) return undefined;
+
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+
+    if (dto.name !== undefined)  { sets.push("name = ?");  vals.push(dto.name); }
+    if (dto.color !== undefined) { sets.push("color = ?"); vals.push(dto.color); }
+
+    if (sets.length > 0) {
+      db.prepare(`UPDATE tags SET ${sets.join(", ")} WHERE id = ?`).run(
+        ...[...vals, id]
+      );
+    }
+
+    return this.findById(id);
   }
- 
+
   delete(id: string): boolean {
-    const db = storageService.getDb();
-    const before = db.tags.length;
- 
-    db.tags = db.tags.filter((t) => t.id !== id);
- 
-    // cascade: ลบ tagId ออกจาก todos ทุกตัวด้วย
-    db.todos = db.todos.map((todo) => ({
-      ...todo,
-      tagIds: todo.tagIds.filter((tid) => tid !== id),
-    }));
- 
-    if (db.tags.length === before) return false;
-    storageService.save(db);
-    return true;
+    // ON DELETE CASCADE ใน todo_tags จัดการ cleanup อัตโนมัติ
+    const result = db.prepare("DELETE FROM tags WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 }
- 
+
 export const tagService = new TagService();
- 

@@ -4,7 +4,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { useTodoStore } from "@/store/todo.store";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import TodoForm from "@/components/TodoForm";
-import type { UpdateTodoDto } from "@/types";
+import type { CreateTodoDto, UpdateTodoDto } from "@/types";
 
 export default function EditTodoPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,11 +38,11 @@ export default function EditTodoPage() {
     );
   }
 
-  const handleSubmit = async (data: UpdateTodoDto) => {
+  const handleSubmit = async (data: CreateTodoDto | UpdateTodoDto) => {
     setLoading(true);
     setError(null);
     try {
-      await updateTodo(todo.id, data);
+      await updateTodo(todo.id, data as UpdateTodoDto);
       navigate("/");
     } catch (e) {
       setError((e as Error).message);
@@ -107,7 +107,7 @@ export default function EditTodoPage() {
         <div className="card p-6">
           <TodoForm
             initial={todo}
-            onSubmit={handleSubmit as (data: UpdateTodoDto) => Promise<void>}
+            onSubmit={handleSubmit}
             submitLabel="บันทึกการแก้ไข"
             loading={loading}
           />

@@ -17,9 +17,10 @@ import {
 interface Props {
   todo: Todo;
   tags: { id: string; name: string; color: string }[];
+  dragHandle?: React.ReactNode;
 }
 
-export default function TodoCard({ todo, tags }: Props) {
+export default function TodoCard({ todo, tags, dragHandle }: Props) {
   const navigate = useNavigate();
   const { patchStatus, deleteTodo } = useTodoStore();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -54,6 +55,9 @@ export default function TodoCard({ todo, tags }: Props) {
       >
         {/* Top row */}
         <div className="flex items-start gap-3">
+          {/* Drag handle */}
+          {dragHandle}
+
           {/* Checkbox */}
           <button
             onClick={handleToggleDone}

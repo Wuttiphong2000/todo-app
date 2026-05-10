@@ -3,7 +3,8 @@ import cors from "cors";
 import todoRoutes from "./routes/todo.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/error.middleware.js";
-import { storageService } from "./services/storage.service.js";
+import { todoService } from "./services/todo.service.js";
+import { tagService } from "./services/tag.service.js";
  
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -37,14 +38,19 @@ app.get("/health", (_req, res) => {
 // ── Export / Import (full backup) ─────────────────────────────────────────────
  
 app.get("/api/export", (_req, res) => {
-  const db = storageService.getDb();
   res
     .setHeader("Content-Type", "application/json")
     .setHeader(
       "Content-Disposition",
       `attachment; filename="todo-backup-${Date.now()}.json"`
     )
-    .json({ success: true, data: db });
+    .json({
+      success: true,
+      data: {
+        todos: todoService.findAll(),
+        tags: tagService.findAll(),
+      },
+    });
 });
  
 // ── Routes ────────────────────────────────────────────────────────────────────

@@ -1,3 +1,9 @@
 .aider*
 node_modules
 .env.example
+.claude
+
+# SQLite database files
+claude-todo-backend/todo.db
+claude-todo-backend/todo.db-shm
+claude-todo-backend/todo.db-wal

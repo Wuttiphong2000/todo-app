@@ -1,8 +1,22 @@
 // src/pages/HomePage.tsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { useTodoStore } from "@/store/todo.store";
 import TodoCard from "@/components/TodoCard";
+import SortableTodoCard from "@/components/SortableTodoCard";
 import FilterBar from "@/components/FilterBar";
 import type { Status, Priority } from "@/types";
 
@@ -19,8 +33,14 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 export default function HomePage() {
-  const { todos, tags, loading, fetchTodos } = useTodoStore();
+  const { todos, tags, loading, fetchTodos, reorderTodos } = useTodoStore();
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+
+  const isDragEnabled =
+    filters.sortBy === "order" &&
+    !filters.status &&
+    !filters.priority &&
+    !filters.search;
 
   useEffect(() => {
     fetchTodos({
@@ -38,12 +58,25 @@ export default function HomePage() {
     const inProgress = todos.filter((t) => t.status === "in_progress").length;
     const overdue = todos.filter(
       (t) =>
-        t.dueDate &&
-        t.status !== "done" &&
-        new Date(t.dueDate) < new Date()
+        t.dueDate && t.status !== "done" && new Date(t.dueDate) < new Date()
     ).length;
     return { total, done, inProgress, overdue };
   }, [todos]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const from = todos.findIndex((t) => t.id === active.id);
+      const to = todos.findIndex((t) => t.id === over.id);
+      reorderTodos(arrayMove(todos, from, to));
+    },
+    [todos, reorderTodos]
+  );
 
   return (
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -58,6 +91,13 @@ export default function HomePage() {
       {/* Filter Bar */}
       <FilterBar filters={filters} onChange={setFilters} />
 
+      {/* Drag hint */}
+      {isDragEnabled && todos.length > 1 && (
+        <p className="text-xs text-slate-600 text-center mb-3">
+          Hold and drag to reorder
+        </p>
+      )}
+
       {/* Todo List */}
       {loading && todos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-slate-600">
@@ -65,7 +105,26 @@ export default function HomePage() {
           <p className="text-sm font-body">กำลังโหลด...</p>
         </div>
       ) : todos.length === 0 ? (
-        <EmptyState hasFilter={!!filters.status || !!filters.priority || !!filters.search} />
+        <EmptyState
+          hasFilter={!!filters.status || !!filters.priority || !!filters.search}
+        />
+      ) : isDragEnabled ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={todos.map((t) => t.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {todos.map((todo) => (
+                <SortableTodoCard key={todo.id} todo={todo} tags={tags} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
         <div className="space-y-2">
           {todos.map((todo, i) => (

@@ -1,99 +1,205 @@
 import { nanoid } from "nanoid";
-import { storageService } from "./storage.service.js";
+import { db } from "../db/database.js";
 import type {
   Todo,
+  SubTask,
   CreateTodoDto,
   UpdateTodoDto,
   PatchStatusDto,
   ReorderDto,
   TodoQueryParams,
-  SubTask,
 } from "../types/index.js";
- 
-const PRIORITY_ORDER: Record<string, number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
-};
- 
+
+// ── Row Types ─────────────────────────────────────────────────────────────────
+
+interface TodoRow {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+interface SubtaskRow {
+  id: string;
+  todo_id: string;
+  title: string;
+  completed: number;
+  created_at: string;
+}
+
+interface TagLinkRow {
+  todo_id: string;
+  tag_id: string;
+}
+
+// ── Mappers ───────────────────────────────────────────────────────────────────
+
+function toSubTask(r: SubtaskRow): SubTask {
+  return {
+    id: r.id,
+    title: r.title,
+    completed: r.completed === 1,
+    createdAt: r.created_at,
+  };
+}
+
+function toTodo(row: TodoRow, tagIds: string[], subtasks: SubTask[]): Todo {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status as Todo["status"],
+    priority: row.priority as Todo["priority"],
+    tagIds,
+    subtasks,
+    dueDate: row.due_date,
+    order: row.order_index,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at,
+  };
+}
+
+// Batch-fetch tags and subtasks for a list of todo rows in 2 queries
+function hydrate(rows: TodoRow[]): Todo[] {
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r) => r.id);
+  const ph = ids.map(() => "?").join(",");
+
+  const tagLinks = db
+    .prepare(`SELECT todo_id, tag_id FROM todo_tags WHERE todo_id IN (${ph})`)
+    .all(...ids) as TagLinkRow[];
+
+  const subtaskRows = db
+    .prepare(
+      `SELECT * FROM subtasks WHERE todo_id IN (${ph}) ORDER BY created_at ASC`
+    )
+    .all(...ids) as SubtaskRow[];
+
+  const tagMap = new Map<string, string[]>();
+  for (const r of tagLinks) {
+    if (!tagMap.has(r.todo_id)) tagMap.set(r.todo_id, []);
+    tagMap.get(r.todo_id)!.push(r.tag_id);
+  }
+
+  const subMap = new Map<string, SubTask[]>();
+  for (const r of subtaskRows) {
+    if (!subMap.has(r.todo_id)) subMap.set(r.todo_id, []);
+    subMap.get(r.todo_id)!.push(toSubTask(r));
+  }
+
+  return rows.map((r) =>
+    toTodo(r, tagMap.get(r.id) ?? [], subMap.get(r.id) ?? [])
+  );
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 class TodoService {
-  // ── Helpers ───────────────────────────────────────────────────────────────
- 
-  private now(): string {
-    return new Date().toISOString();
+  private nextOrder(): number {
+    const row = db
+      .prepare("SELECT COALESCE(MAX(order_index), -1) + 1 AS n FROM todos")
+      .get() as { n: number };
+    return row.n;
   }
- 
-  private getNextOrder(todos: Todo[]): number {
-    if (todos.length === 0) return 0;
-    return Math.max(...todos.map((t) => t.order)) + 1;
-  }
- 
-  // ── CRUD ──────────────────────────────────────────────────────────────────
- 
+
   findAll(query: TodoQueryParams = {}): Todo[] {
-    const db = storageService.getDb();
-    let todos = db.todos;
- 
-    // ── Filter ──
+    const conds: string[] = [];
+    const params: unknown[] = [];
+
     if (query.status) {
-      todos = todos.filter((t) => t.status === query.status);
+      conds.push("status = ?");
+      params.push(query.status);
     }
     if (query.priority) {
-      todos = todos.filter((t) => t.priority === query.priority);
+      conds.push("priority = ?");
+      params.push(query.priority);
     }
     if (query.tagId) {
-      todos = todos.filter((t) => t.tagIds.includes(query.tagId!));
+      conds.push(
+        "EXISTS (SELECT 1 FROM todo_tags tt WHERE tt.todo_id = t.id AND tt.tag_id = ?)"
+      );
+      params.push(query.tagId);
     }
     if (query.search) {
-      const q = query.search.toLowerCase();
-      todos = todos.filter(
-        (t) =>
-          t.title.toLowerCase().includes(q) ||
-          (t.description?.toLowerCase().includes(q) ?? false)
-      );
+      conds.push("(t.title LIKE ? OR t.description LIKE ?)");
+      params.push(`%${query.search}%`, `%${query.search}%`);
     }
- 
-    // ── Sort ──
-    const sortBy = query.sortBy ?? "order";
-    const sortDir = query.sortDir ?? "asc";
- 
-    todos.sort((a, b) => {
-      let cmp = 0;
-      if (sortBy === "priority") {
-        cmp = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
-      } else if (sortBy === "dueDate") {
-        const da = a.dueDate ?? "9999-12-31";
-        const db = b.dueDate ?? "9999-12-31";
-        cmp = da.localeCompare(db);
-      } else {
-        const va = String(a[sortBy as keyof Todo] ?? "");
-        const vb = String(b[sortBy as keyof Todo] ?? "");
-        cmp = va.localeCompare(vb);
-      }
-      return sortDir === "desc" ? -cmp : cmp;
-    });
- 
-    return todos;
+
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const sortCol: Record<string, string> = {
+      createdAt: "t.created_at",
+      updatedAt: "t.updated_at",
+      dueDate: "t.due_date",
+      priority:
+        "CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END",
+      order: "t.order_index",
+    };
+    const col = sortCol[query.sortBy ?? "order"] ?? "t.order_index";
+    const dir = query.sortDir === "desc" ? "DESC" : "ASC";
+
+    const rows = db
+      .prepare(`SELECT t.* FROM todos t ${where} ORDER BY ${col} ${dir}`)
+      .all(...params) as TodoRow[];
+
+    return hydrate(rows);
   }
- 
+
   findById(id: string): Todo | undefined {
-    const db = storageService.getDb();
-    return db.todos.find((t) => t.id === id);
+    const row = db
+      .prepare("SELECT * FROM todos WHERE id = ?")
+      .get(id) as TodoRow | undefined;
+    if (!row) return undefined;
+    return hydrate([row])[0];
   }
- 
+
   create(dto: CreateTodoDto): Todo {
-    const db = storageService.getDb();
- 
-    const now = this.now();
-    const subtasks: SubTask[] = (dto.subtasks ?? []).map((s) => ({
-      id: nanoid(),
-      title: s.title,
-      completed: false,
-      createdAt: now,
-    }));
- 
-    const todo: Todo = {
-      id: nanoid(),
+    const id = nanoid();
+    const now = new Date().toISOString();
+    const order = this.nextOrder();
+    const subtasks: SubTask[] = [];
+
+    db.transaction(() => {
+      db.prepare(
+        "INSERT INTO todos (id, title, description, status, priority, due_date, order_index, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(
+        id,
+        dto.title,
+        dto.description ?? null,
+        "pending",
+        dto.priority ?? "medium",
+        dto.dueDate ?? null,
+        order,
+        now,
+        now,
+        null
+      );
+
+      for (const s of dto.subtasks ?? []) {
+        const sid = nanoid();
+        db.prepare(
+          "INSERT INTO subtasks (id, todo_id, title, completed, created_at) VALUES (?, ?, ?, ?, ?)"
+        ).run(sid, id, s.title, 0, now);
+        subtasks.push({ id: sid, title: s.title, completed: false, createdAt: now });
+      }
+
+      for (const tagId of dto.tagIds ?? []) {
+        db.prepare(
+          "INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)"
+        ).run(id, tagId);
+      }
+    })();
+
+    return {
+      id,
       title: dto.title,
       description: dto.description ?? null,
       status: "pending",
@@ -101,86 +207,89 @@ class TodoService {
       tagIds: dto.tagIds ?? [],
       subtasks,
       dueDate: dto.dueDate ?? null,
-      order: this.getNextOrder(db.todos),
+      order,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
     };
- 
-    db.todos.push(todo);
-    storageService.save(db);
-    return todo;
   }
- 
+
   update(id: string, dto: UpdateTodoDto): Todo | undefined {
-    const db = storageService.getDb();
-    const index = db.todos.findIndex((t) => t.id === id);
-    if (index === -1) return undefined;
- 
-    const existing = db.todos[index];
-    const now = this.now();
- 
-    const updated: Todo = {
-      ...existing,
-      ...dto,
-      id: existing.id,       // ป้องกัน id ถูกเปลี่ยน
-      createdAt: existing.createdAt,
-      updatedAt: now,
-      // completedAt ไม่ถูก update ที่นี่ — ใช้ patchStatus แทน
-      completedAt: existing.completedAt,
-    };
- 
-    db.todos[index] = updated;
-    storageService.save(db);
-    return updated;
+    const exists = db
+      .prepare("SELECT id FROM todos WHERE id = ?")
+      .get(id);
+    if (!exists) return undefined;
+
+    const now = new Date().toISOString();
+
+    db.transaction(() => {
+      const sets = ["updated_at = ?"];
+      const vals: unknown[] = [now];
+
+      if (dto.title !== undefined)       { sets.push("title = ?");       vals.push(dto.title); }
+      if (dto.description !== undefined) { sets.push("description = ?"); vals.push(dto.description); }
+      if (dto.priority !== undefined)    { sets.push("priority = ?");    vals.push(dto.priority); }
+      if (dto.dueDate !== undefined)     { sets.push("due_date = ?");    vals.push(dto.dueDate); }
+      if (dto.order !== undefined)       { sets.push("order_index = ?"); vals.push(dto.order); }
+
+      db.prepare(`UPDATE todos SET ${sets.join(", ")} WHERE id = ?`).run(
+        ...[...vals, id]
+      );
+
+      if (dto.tagIds !== undefined) {
+        db.prepare("DELETE FROM todo_tags WHERE todo_id = ?").run(id);
+        for (const tagId of dto.tagIds) {
+          db.prepare(
+            "INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)"
+          ).run(id, tagId);
+        }
+      }
+
+      if (dto.subtasks !== undefined) {
+        db.prepare("DELETE FROM subtasks WHERE todo_id = ?").run(id);
+        for (const s of dto.subtasks) {
+          db.prepare(
+            "INSERT INTO subtasks (id, todo_id, title, completed, created_at) VALUES (?, ?, ?, ?, ?)"
+          ).run(s.id, id, s.title, s.completed ? 1 : 0, s.createdAt);
+        }
+      }
+    })();
+
+    return this.findById(id);
   }
- 
+
   patchStatus(id: string, dto: PatchStatusDto): Todo | undefined {
-    const db = storageService.getDb();
-    const index = db.todos.findIndex((t) => t.id === id);
-    if (index === -1) return undefined;
- 
-    const now = this.now();
-    const existing = db.todos[index];
- 
-    db.todos[index] = {
-      ...existing,
-      status: dto.status,
-      updatedAt: now,
-      completedAt:
-        dto.status === "done"
-          ? now
-          : dto.status === "pending" || dto.status === "in_progress"
-          ? null
-          : existing.completedAt,
-    };
- 
-    storageService.save(db);
-    return db.todos[index];
+    const exists = db
+      .prepare("SELECT id FROM todos WHERE id = ?")
+      .get(id);
+    if (!exists) return undefined;
+
+    const now = new Date().toISOString();
+    const completedAt = dto.status === "done" ? now : null;
+
+    db.prepare(
+      "UPDATE todos SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?"
+    ).run(dto.status, completedAt, now, id);
+
+    return this.findById(id);
   }
- 
+
   reorder(dto: ReorderDto): void {
-    const db = storageService.getDb();
-    const orderMap = new Map(dto.items.map((i) => [i.id, i.order]));
- 
-    db.todos = db.todos.map((t) => {
-      const newOrder = orderMap.get(t.id);
-      if (newOrder === undefined) return t;
-      return { ...t, order: newOrder, updatedAt: this.now() };
-    });
- 
-    storageService.save(db);
+    const now = new Date().toISOString();
+    const stmt = db.prepare(
+      "UPDATE todos SET order_index = ?, updated_at = ? WHERE id = ?"
+    );
+    db.transaction(() => {
+      for (const item of dto.items) {
+        stmt.run(item.order, now, item.id);
+      }
+    })();
   }
- 
+
   delete(id: string): boolean {
-    const db = storageService.getDb();
-    const before = db.todos.length;
-    db.todos = db.todos.filter((t) => t.id !== id);
-    if (db.todos.length === before) return false;
-    storageService.save(db);
-    return true;
+    const result = db.prepare("DELETE FROM todos WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 }
- 
+
 export const todoService = new TodoService();
- 

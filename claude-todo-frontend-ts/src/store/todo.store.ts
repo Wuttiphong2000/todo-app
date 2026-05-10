@@ -22,6 +22,7 @@ interface TodoStore {
   createTodo: (dto: CreateTodoDto) => Promise<Todo>;
   updateTodo: (id: string, dto: UpdateTodoDto) => Promise<void>;
   patchStatus: (id: string, status: Todo["status"]) => Promise<void>;
+  reorderTodos: (reordered: Todo[]) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
 
   // ── Tags ──
@@ -87,6 +88,16 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
       // Rollback on error
       await get().fetchTodos();
       throw e;
+    }
+  },
+
+  reorderTodos: async (reordered) => {
+    const previous = get().todos;
+    set({ todos: reordered });
+    try {
+      await todoApi.reorder(reordered.map((t, i) => ({ id: t.id, order: i })));
+    } catch {
+      set({ todos: previous });
     }
   },
 

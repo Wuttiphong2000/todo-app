@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+*.md
+.env*
+.vscode
+.claude
+todo.db
+todo.db-shm
+todo.db-wal

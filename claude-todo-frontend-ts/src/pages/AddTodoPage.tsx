@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTodoStore } from "@/store/todo.store";
 import TodoForm from "@/components/TodoForm";
-import type { CreateTodoDto } from "@/types";
+import type { CreateTodoDto, UpdateTodoDto } from "@/types";
 
 export default function AddTodoPage() {
   const navigate = useNavigate();
@@ -11,11 +11,11 @@ export default function AddTodoPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (data: CreateTodoDto) => {
+  const handleSubmit = async (data: CreateTodoDto | UpdateTodoDto) => {
     setLoading(true);
     setError(null);
     try {
-      await createTodo(data);
+      await createTodo(data as CreateTodoDto);
       navigate("/");
     } catch (e) {
       setError((e as Error).message);
@@ -54,7 +54,7 @@ export default function AddTodoPage() {
       {/* Form */}
       <div className="card p-6">
         <TodoForm
-          onSubmit={handleSubmit as (data: CreateTodoDto) => Promise<void>}
+          onSubmit={handleSubmit}
           submitLabel="เพิ่ม Task"
           loading={loading}
         />

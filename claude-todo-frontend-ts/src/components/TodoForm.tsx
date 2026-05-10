@@ -57,14 +57,13 @@ export default function TodoForm({
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
-    await onSubmit({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      priority,
-      tagIds,
-      dueDate: dueDate || null,
-      subtasks: subtasks.map((s) => ({ title: s.title })),
-    });
+    await onSubmit(
+      initial
+        ? // edit mode — send full SubTask objects (backend updateTodoSchema requires id/completed/createdAt)
+          { title: title.trim(), description: description.trim() || undefined, priority, tagIds, dueDate: dueDate || null, subtasks }
+        : // create mode — send { title } only (backend createTodoSchema)
+          { title: title.trim(), description: description.trim() || undefined, priority, tagIds, dueDate: dueDate || null, subtasks: subtasks.map((s) => ({ title: s.title })) }
+    );
   };
 
   const priorityOptions: { value: Priority; label: string; cls: string }[] = [
@@ -192,9 +191,14 @@ export default function TodoForm({
                   onClick={() => setNewTagColor(c)}
                   className={cn(
                     "w-5 h-5 rounded-full transition-all",
-                    newTagColor === c && "ring-2 ring-offset-2 ring-offset-surface-700 scale-110"
+                    newTagColor === c && "scale-110"
                   )}
-                  style={{ backgroundColor: c, ringColor: c }}
+                  style={{
+                    backgroundColor: c,
+                    ...(newTagColor === c
+                      ? { outline: `2px solid ${c}`, outlineOffset: "2px" }
+                      : {}),
+                  }}
                 />
               ))}
             </div>
