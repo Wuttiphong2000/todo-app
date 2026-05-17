@@ -1,6 +1,6 @@
 # Tasks
 
-> Phases 1–7 are complete and running. Phases 8+ are the remaining roadmap, ordered by value vs complexity.
+> Phases 1–8 are complete and running. Phases 9+ are the remaining roadmap, ordered by value vs complexity.
 > Feature selection based on competitive analysis of Todoist, TickTick, Habitica, and Linear (May 2026).
 
 ---
@@ -85,15 +85,51 @@
 
 ---
 
-## Phase 8 — Accessibility & UX Fixes (in progress)
+## Phase 8 — Auth & Responsive ✅
 
-> Findings from UI/UX guideline audit. CRITICAL items block Phase 9+.
+> JWT authentication with 2 hardcoded users (no registration). Todos are shared between both users.
+> See `architecture.md → Authentication` for full detail.
+
+### Authentication (Backend)
+
+- [x] Install `bcryptjs` + `jsonwebtoken` (+ `@types/` for both)
+- [x] `src/config/users.ts` — 2 hardcoded users with bcrypt-hashed passwords (rounds=12); `JWT_SECRET` constant
+- [x] `POST /api/auth/login` — verify username + bcrypt.compareSync → return JWT (30-day expiry)
+- [x] `GET /api/auth/me` — verify Bearer token → return current user object
+- [x] `src/middlewares/auth.middleware.ts` — `requireAuth` middleware, attaches `req.user` on valid JWT
+- [x] Apply `requireAuth` to all protected routes: `/api/todos`, `/api/tags`, `/api/export`
+- [x] `/api/auth/*` and `/health` remain public (no token required)
+
+### Authentication (Frontend)
+
+- [x] `src/store/auth.store.ts` — Zustand store: `login()`, `logout()`, `hydrate()` (reads token from localStorage on boot)
+- [x] `src/pages/LoginPage.tsx` — login form with show/hide password toggle; redirects to `/` on success
+- [x] `src/components/ProtectedRoute.tsx` — redirects to `/login` if no token in store
+- [x] `src/api/client.ts` — request interceptor auto-attaches `Authorization: Bearer <token>`; 401 response clears auth and redirects to `/login`
+- [x] `src/App.tsx` — `/login` route is public; all other routes wrapped in `<ProtectedRoute>`
+- [x] Navbar — user badge (shows current username) + logout button (clears token + cache)
+
+### Responsive
+
+- [x] Added `xs: 420px` custom Tailwind breakpoint in `tailwind.config.js`
+- [x] TodoCard action buttons — always visible on mobile (`opacity-100`), hover-only on desktop (`sm:opacity-0 sm:group-hover:opacity-100`); button size `w-9 h-9` on mobile, `sm:w-7 sm:h-7` on desktop
+- [x] TodoCard Edit button changed from `onClick → navigate()` to `<Link to={...}>` (fixes Cmd+click)
+- [x] FilterBar — restructured with `flex-wrap`; search full-width on its own row; status + selects on second row
+- [x] TodoForm — priority + due date grid changed to `grid-cols-1 sm:grid-cols-2` (stacks on mobile)
+- [x] AddTodoPage / EditTodoPage — card padding `p-4 sm:p-6`
+- [x] Navbar — icon-only on mobile (`sm:hidden` / `hidden sm:inline`), username badge hidden on mobile, compact height `h-14 sm:h-16`
+
+---
+
+## Phase 9 — Accessibility & UX Fixes (in progress)
+
+> Findings from UI/UX guideline audit. Some items already fixed in Phase 8.
 
 ### CRITICAL
 
 - [ ] **Form labels** — add `htmlFor` + `id` on all inputs in `TodoForm` (title, description, due date, subtask input, tag name input)
-- [ ] **Touch targets** — checkbox `w-5 h-5` (20px), Edit/Delete buttons `w-7 h-7` (28px), color picker dots `w-5 h-5` (20px) — all below 44×44px minimum
-- [ ] **Mobile action buttons** — Edit/Delete use `opacity-0 group-hover:opacity-100`; invisible on touch devices; need always-visible fallback on mobile
+- [ ] **Touch targets** — checkbox `w-5 h-5` (20px), color picker dots `w-5 h-5` (20px) still below 44×44px minimum
+- [x] **Mobile action buttons** — fixed in Phase 8 (always visible on mobile)
 - [ ] **ConfirmDialog ARIA** — add `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing to title `id`
 - [ ] **Emoji → SVG icons** — replace `⚠` (overdue), `✓` (tag selected), `✕` (delete subtask) with proper SVG; add `aria-label` to delete subtask button
 
@@ -101,7 +137,7 @@
 
 - [ ] **`transition-all` → specific properties** — `.btn-primary`, `.btn-ghost`, `.btn-danger` in `index.css`; replace with `transition-[background-color,border-color,opacity,transform]`
 - [ ] **`color-scheme: dark`** — add to `html` element in `index.css`; add `<meta name="color-scheme" content="dark">` in `index.html` (fixes date picker and scrollbar on Windows)
-- [ ] **Edit button → `<Link>`** — `TodoCard` uses `onClick={() => navigate(...)}` which breaks Cmd+click; replace with `<Link to={...}>`
+- [x] **Edit button → `<Link>`** — fixed in Phase 8 (`TodoCard` now uses `<Link to={...}>`)
 - [ ] **URL reflects filter state** — `HomePage` stores filters in `useState`; sync to query params so filters survive refresh and can be shared
 - [ ] **SVG `aria-hidden`** — add `aria-hidden="true"` to all decorative SVGs inside buttons that already have `aria-label`
 
@@ -113,7 +149,7 @@
 
 ---
 
-## Phase 9 — Tag Management & Import/Export UI
+## Phase 10 — Tag Management & Import/Export UI
 
 > Backend APIs already exist — this is purely frontend work.
 
@@ -121,11 +157,11 @@
 - [ ] **Update tag in store** — add `updateTag(id, dto)` action to `todo.store.ts`; call `PUT /api/tags/:id`
 - [ ] **Add `/tags` route** in React Router and Navbar link
 - [ ] **Import UI** — add file input button in HomePage or Navbar; reads JSON file (same shape as export); calls `POST /api/import`
-- [ ] **Backend import endpoint** — `POST /api/import` parses full JSON backup and upserts todos, tags, subtasks, todo_tags in a transaction; validate with Zod
+- [ ] **Backend import endpoint** — `POST /api/import` parses full JSON backup and upserts todos, tags, subtasks, todo_tags in a transaction; validate with Zod; protect with `requireAuth`
 
 ---
 
-## Phase 10 — Theme & Polish
+## Phase 11 — Theme & Polish
 
 - [ ] **Light theme toggle** — Tailwind `darkMode: 'class'`; add `ThemeProvider` context; toggle button in Navbar; persist choice in `localStorage`
 - [ ] **Switch `dark:` variants** — audit `index.css` and all components; add `dark:` prefix to dark-only colours; define light palette tokens
@@ -135,7 +171,7 @@
 
 ---
 
-## Phase 11 — Recurring Tasks
+## Phase 12 — Recurring Tasks
 
 > One of the most-requested features in Todoist, TickTick, and Microsoft To Do.
 
@@ -156,14 +192,14 @@
 
 ---
 
-## Phase 12 — Focus Mode & Pomodoro Timer
+## Phase 13 — Focus Mode & Pomodoro Timer
 
 > TickTick's built-in Pomodoro is a major differentiator. Focus To-Do has 4.8★ on the App Store.
 
 ### Backend
 
 - [ ] **Migration v4** — create `focus_sessions` table (id, todo_id, duration, completed, started_at, ended_at)
-- [ ] **Focus routes** — `POST /api/focus/sessions` (start), `PATCH /api/focus/sessions/:id` (end/cancel), `GET /api/focus/stats` (today's total focus minutes)
+- [ ] **Focus routes** — `POST /api/focus/sessions` (start), `PATCH /api/focus/sessions/:id` (end/cancel), `GET /api/focus/stats` (today's total focus minutes); all protected by `requireAuth`
 
 ### Frontend
 
@@ -175,7 +211,7 @@
 
 ---
 
-## Phase 13 — Enhanced Dashboard & Statistics
+## Phase 14 — Enhanced Dashboard & Statistics
 
 > Todoist's productivity stats and Any.do's weekly overview are frequently praised in reviews.
 
@@ -187,14 +223,14 @@
 
 ---
 
-## Phase 14 — Habit Tracker
+## Phase 15 — Habit Tracker
 
 > TickTick habit tracking and Habitica gamification are the top differentiators in the todo app market.
 
 ### Backend
 
 - [ ] **Migration v3** — create `habits` and `habit_logs` tables (see architecture.md for DDL)
-- [ ] **Habit routes** — `GET /api/habits`, `POST /api/habits`, `PUT /api/habits/:id`, `DELETE /api/habits/:id`, `POST /api/habits/:id/log` (check-in today), `DELETE /api/habits/:id/log/:date` (undo)
+- [ ] **Habit routes** — `GET /api/habits`, `POST /api/habits`, `PUT /api/habits/:id`, `DELETE /api/habits/:id`, `POST /api/habits/:id/log` (check-in today), `DELETE /api/habits/:id/log/:date` (undo); all protected by `requireAuth`
 - [ ] **Streak calculation** — `HabitService.getStreak(id)` counts consecutive days with a log entry going backwards from today
 
 ### Frontend
@@ -207,7 +243,7 @@
 
 ---
 
-## Phase 15 — Calendar View
+## Phase 16 — Calendar View
 
 > TickTick's calendar integration is its most-praised feature over Todoist.
 
@@ -221,7 +257,7 @@
 
 ---
 
-## Phase 16 — Filter URL Sync & Keyboard Shortcuts
+## Phase 17 — Filter URL Sync & Keyboard Shortcuts
 
 > Linear's URL-based filter state is widely praised for shareability.
 
@@ -231,20 +267,21 @@
 
 ---
 
-## Phase 17 — DevOps & CI/CD
+## Phase 18 — DevOps & CI/CD
 
 - [ ] **`docker-compose.override.yml`** — bind-mount `src/` in both services for hot reload without rebuild
 - [ ] **GitHub Actions CI** — `npm ci && npm run build && npm run lint` on every PR; fail fast
 - [ ] **GitHub Actions CD** — on push to `main`: build Docker images, push to GHCR, SSH deploy (or Docker Swarm update)
 - [ ] **Production nginx with SSL** — Let's Encrypt / Certbot auto-renewal; redirect HTTP → HTTPS
 - [ ] **Health check endpoints** — backend `/health` already exists; add frontend nginx healthcheck in docker-compose
+- [ ] **Set `JWT_SECRET` env var in production** — do not rely on the default hardcoded fallback in `src/config/users.ts`
 
 ---
 
-## Phase 18 — Testing
+## Phase 19 — Testing
 
 > No tests currently exist. Recommended stack: vitest (frontend) + jest + supertest (backend).
 
-- [ ] **Backend integration tests** — `jest` + `supertest` hitting a real in-memory SQLite; test routes for Todo CRUD, Tag CRUD, reorder, export
-- [ ] **Frontend unit tests** — `vitest` + React Testing Library; test Zustand store actions, TodoCard rendering, FilterBar state
-- [ ] **E2E tests** — Playwright: create todo → edit → reorder → delete happy path; filter by status happy path
+- [ ] **Backend integration tests** — `jest` + `supertest` hitting a real in-memory SQLite; test auth login (valid/invalid), Todo CRUD, Tag CRUD, reorder, export
+- [ ] **Frontend unit tests** — `vitest` + React Testing Library; test Zustand stores (auth + todo), LoginPage form, ProtectedRoute redirect, TodoCard rendering
+- [ ] **E2E tests** — Playwright: login flow → create todo → edit → reorder → delete → logout happy path

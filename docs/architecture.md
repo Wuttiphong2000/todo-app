@@ -82,14 +82,18 @@ Request → Routes → Middleware (Zod) → Controllers → Services → Databas
 ```
 src/
 ├── app.ts                    # Entry point: CORS, body-parser, mount routers
+├── config/
+│   └── users.ts              # ★ Hardcoded users (bcrypt hashes) + JWT_SECRET
 ├── types/
 │   └── index.ts              # Interfaces และ DTOs ทั้งหมด (source of truth)
 ├── routes/
-│   ├── todo.routes.ts        # GET/POST/PUT/DELETE /api/todos
-│   ├── tag.routes.ts         # GET/POST/PUT/DELETE /api/tags
+│   ├── auth.routes.ts        # POST /api/auth/login, GET /api/auth/me  (public)
+│   ├── todo.routes.ts        # GET/POST/PUT/DELETE /api/todos           (protected)
+│   ├── tag.routes.ts         # GET/POST/PUT/DELETE /api/tags            (protected)
 │   ├── habit.routes.ts       # (planned) GET/POST/PUT/DELETE /api/habits
 │   └── focus.routes.ts       # (planned) POST /api/focus/sessions
 ├── middlewares/
+│   ├── auth.middleware.ts    # ★ requireAuth — jwt.verify + attaches req.user
 │   ├── validate.middleware.ts # Zod schema factory → 400 เมื่อ invalid
 │   └── error.middleware.ts   # Global error handler + 404 handler
 ├── controllers/
@@ -361,6 +365,7 @@ src/
 │   ├── habit.api.ts          # (planned) getAll, create, logToday, delete
 │   └── focus.api.ts          # (planned) startSession, endSession, getStats
 ├── store/
+│   ├── auth.store.ts         # ★ Zustand: login/logout/hydrate, token in localStorage
 │   ├── todo.store.ts         # Zustand store — state + all todo/tag async actions
 │   ├── habit.store.ts        # (planned) habit state + actions
 │   └── focus.store.ts        # (planned) timer state + session actions
@@ -368,6 +373,7 @@ src/
 │   ├── useLocalSync.ts       # Hydrates from localStorage → fetches API on mount
 │   └── usePomodoro.ts        # (planned) countdown timer logic
 ├── pages/
+│   ├── LoginPage.tsx         # ★ /login — login form (public, no auth required)
 │   ├── HomePage.tsx          # / — stats cards, FilterBar, todo list
 │   ├── AddTodoPage.tsx       # /add — create form
 │   ├── EditTodoPage.tsx      # /edit/:id — edit form + delete button
@@ -376,7 +382,8 @@ src/
 │   ├── FocusPage.tsx         # /focus — (planned) Pomodoro timer + task picker
 │   └── CalendarPage.tsx      # /calendar — (planned) monthly/weekly view
 ├── components/
-│   ├── Navbar.tsx            # Sticky header with logo and nav links
+│   ├── Navbar.tsx            # Sticky header: logo, nav links, username badge, logout button
+│   ├── ProtectedRoute.tsx    # ★ Redirects to /login if no auth token in store
 │   ├── TodoCard.tsx          # Task card with inline status toggle and delete
 │   ├── SortableTodoCard.tsx  # Wraps TodoCard with DnD grip handle
 │   ├── TodoForm.tsx          # Shared form for Add and Edit
@@ -390,15 +397,18 @@ src/
 
 ### Routing (React Router v6)
 
-| Path | Page | Status |
-|------|------|--------|
-| `/` | HomePage | Done |
-| `/add` | AddTodoPage | Done |
-| `/edit/:id` | EditTodoPage | Done |
-| `/tags` | TagsPage | Planned |
-| `/habits` | HabitsPage | Planned |
-| `/focus` | FocusPage | Planned |
-| `/calendar` | CalendarPage | Planned |
+| Path | Page | Auth | Status |
+|------|------|------|--------|
+| `/login` | LoginPage | Public | Done |
+| `/` | HomePage | Protected | Done |
+| `/add` | AddTodoPage | Protected | Done |
+| `/edit/:id` | EditTodoPage | Protected | Done |
+| `/tags` | TagsPage | Protected | Planned |
+| `/habits` | HabitsPage | Protected | Planned |
+| `/focus` | FocusPage | Protected | Planned |
+| `/calendar` | CalendarPage | Protected | Planned |
+
+All protected routes are wrapped with `<ProtectedRoute>` in `App.tsx`.
 
 ### State Management (Zustand)
 
@@ -477,6 +487,91 @@ Reusable CSS component classes (defined in `@layer components`):
 | `.input-base` | Form inputs with focus ring |
 | `.badge-priority-{low\|medium\|high}` | Priority colour badges |
 | `.badge-status-{pending\|in_progress\|done}` | Status colour badges |
+
+---
+
+## Authentication
+
+> **Design decision:** No registration. Exactly 2 users are hardcoded with bcrypt-hashed passwords. Todos are **shared** between both users — both see the same task list. The login layer exists purely to prevent unauthenticated access from the outside.
+
+### Users
+
+| Username | Password | Notes |
+|----------|----------|-------|
+| `nxmpexng` | `01092004` | Stored as bcrypt hash (rounds=12) |
+| `wskt` | `kirikaya43` | Stored as bcrypt hash (rounds=12) |
+
+Passwords are **never stored in plaintext** anywhere in the codebase. Hashes live in `claude-todo-backend/src/config/users.ts`.
+
+### Auth Flow
+
+```
+Browser                          Express Backend
+  │                                    │
+  │  POST /api/auth/login              │
+  │  { username, password }  ────────► │  bcrypt.compareSync(password, hash)
+  │                                    │  jwt.sign({ id, username }, JWT_SECRET)
+  │  { token, user }         ◄──────── │
+  │                                    │
+  │  Store token in localStorage       │
+  │                                    │
+  │  GET /api/todos                    │
+  │  Authorization: Bearer <token> ──► │  requireAuth middleware
+  │                                    │  jwt.verify(token, JWT_SECRET)
+  │  { success, data: [...] } ◄─────── │  → sets req.user, calls next()
+```
+
+### Backend — Key Files
+
+| File | Role |
+|------|------|
+| `src/config/users.ts` | Hardcoded user list + bcrypt hashes + `JWT_SECRET` constant + `JWT_EXPIRES_IN` |
+| `src/routes/auth.routes.ts` | `POST /api/auth/login`, `GET /api/auth/me` |
+| `src/middlewares/auth.middleware.ts` | `requireAuth` — extracts Bearer token, calls `jwt.verify`, attaches `req.user` |
+
+### Public vs Protected Routes
+
+| Route | Auth required? |
+|-------|---------------|
+| `GET /health` | No |
+| `POST /api/auth/login` | No |
+| `GET /api/auth/me` | No (self-verifying) |
+| `GET/POST/PUT/PATCH/DELETE /api/todos/*` | **Yes** |
+| `GET/POST/PUT/DELETE /api/tags/*` | **Yes** |
+| `GET /api/export` | **Yes** |
+| `POST /api/import` | **Yes** (when implemented) |
+
+### Frontend — Key Files
+
+| File | Role |
+|------|------|
+| `src/store/auth.store.ts` | Zustand store: `login()`, `logout()`, `hydrate()` (reads token from localStorage on boot) |
+| `src/pages/LoginPage.tsx` | Login form with show/hide password; redirects to `/` on success |
+| `src/components/ProtectedRoute.tsx` | Wraps routes — redirects to `/login` if no token in store |
+| `src/api/client.ts` | Request interceptor: auto-attaches `Authorization: Bearer <token>`; 401 response clears auth + redirects to `/login` |
+
+### Token Storage & Lifecycle
+
+- Token stored in `localStorage` as `auth_token`
+- User object stored in `localStorage` as `auth_user` (JSON)
+- `useAuthStore.hydrate()` is called once on app mount in `App.tsx` to restore session
+- Token expiry: **30 days** (controlled by `JWT_EXPIRES_IN` in `config/users.ts`)
+- On logout: both `auth_token` and `auth_user` are removed; `todo_app_cache` is also cleared
+- On any 401 response: same cleanup + redirect to `/login`
+
+### Environment Variables for Auth
+
+| Variable | Where | Default | Note |
+|----------|-------|---------|------|
+| `JWT_SECRET` | Backend | `"doable_app_jwt_secret_2026_change_in_prod"` | **Change in production** — if this leaks, anyone can forge tokens |
+
+> **Gotcha:** The `JWT_SECRET` fallback in `config/users.ts` is fine for local dev but must be overridden via env var in any deployment. Docker Compose should set `JWT_SECRET=<random-256-bit-string>`.
+
+### Adding a Third User (if needed later)
+
+1. Hash the new password: `node -e "const b=require('bcryptjs'); console.log(b.hashSync('PASSWORD',12))"`
+2. Add a new entry to the `USERS` array in `src/config/users.ts`
+3. Restart the backend — no migration or database change needed
 
 ---
 
