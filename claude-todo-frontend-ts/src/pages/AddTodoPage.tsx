@@ -52,7 +52,7 @@ export default function AddTodoPage() {
       )}
 
       {/* Form */}
-      <div className="card p-6">
+      <div className="card p-4 sm:p-6">
         <TodoForm
           onSubmit={handleSubmit}
           submitLabel="เพิ่ม Task"

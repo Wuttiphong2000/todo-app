@@ -1,6 +1,6 @@
 // src/components/TodoCard.tsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useTodoStore } from "@/store/todo.store";
 import ConfirmDialog from "./ConfirmDialog";
 import type { Todo } from "@/types";
@@ -21,7 +21,6 @@ interface Props {
 }
 
 export default function TodoCard({ todo, tags, dragHandle }: Props) {
-  const navigate = useNavigate();
   const { patchStatus, deleteTodo } = useTodoStore();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -99,14 +98,14 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
             )}
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => navigate(`/edit/${todo.id}`)}
-              className="w-7 h-7 rounded-lg bg-surface-700 hover:bg-surface-600 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-all"
+          {/* Actions — always visible on touch, hover-reveal on desktop */}
+          <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <Link
+              to={`/edit/${todo.id}`}
+              className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-surface-700 hover:bg-surface-600 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-all"
               aria-label="Edit"
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+              <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M11.5 2.5l2 2-9 9H2.5v-2l9-9z"
                   stroke="currentColor"
@@ -115,13 +114,13 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
                   strokeLinejoin="round"
                 />
               </svg>
-            </button>
+            </Link>
             <button
               onClick={() => setConfirmOpen(true)}
-              className="w-7 h-7 rounded-lg bg-surface-700 hover:bg-red-900/40 flex items-center justify-center text-slate-400 hover:text-red-400 transition-all"
+              className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-surface-700 hover:bg-red-900/40 flex items-center justify-center text-slate-400 hover:text-red-400 transition-all"
               aria-label="Delete"
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+              <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M2 4h12M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"
                   stroke="currentColor"

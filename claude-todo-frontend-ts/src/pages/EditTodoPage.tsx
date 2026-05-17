@@ -104,7 +104,7 @@ export default function EditTodoPage() {
         )}
 
         {/* Form */}
-        <div className="card p-6">
+        <div className="card p-4 sm:p-6">
           <TodoForm
             initial={todo}
             onSubmit={handleSubmit}
