@@ -12,12 +12,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) navigate("/", { replace: true });
-  }, [user]);
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = await login(username.trim(), password);
-    if (ok) navigate("/", { replace: true });
+    await login(username.trim(), password);
   };
 
   return (

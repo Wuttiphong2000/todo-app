@@ -1,6 +1,7 @@
 .aider*
 node_modules
-.env.example
+.env
+.env.local
 .claude
 
 # SQLite database files

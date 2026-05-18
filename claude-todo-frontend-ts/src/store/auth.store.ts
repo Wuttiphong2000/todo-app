@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import client from "@/api/client";
+import type { ApiResponse } from "@/types";
 
 interface AuthUser {
   id: string;
@@ -25,24 +26,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   hydrate: () => {
     const token = localStorage.getItem("auth_token");
     const raw = localStorage.getItem("auth_user");
-    if (token && raw) {
-      try {
-        set({ token, user: JSON.parse(raw) });
-      } catch {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("auth_user");
-      }
+    if (!token || !raw) return;
+
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1])) as { exp: number };
+      if (payload.exp * 1000 < Date.now()) throw new Error("expired");
+      set({ token, user: JSON.parse(raw) });
+    } catch {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
     }
   },
 
   login: async (username, password) => {
     set({ loading: true, error: null });
     try {
-      const res = await client.post<{ token: string; user: AuthUser }>(
+      const res = await client.post<ApiResponse<{ token: string; user: AuthUser }>>(
         "/auth/login",
         { username, password }
       );
-      const { token, user } = res.data as unknown as { token: string; user: AuthUser };
+      const { token, user } = res.data.data!;
       localStorage.setItem("auth_token", token);
       localStorage.setItem("auth_user", JSON.stringify(user));
       set({ token, user, loading: false });

@@ -1,6 +1,6 @@
 # Tasks
 
-> Phases 1–8 are complete and running. Phases 9+ are the remaining roadmap, ordered by value vs complexity.
+> Phases 1–8 are complete and running. **Phase 8a (auth security fixes) is next priority** — must complete before shipping new features. Phases 9+ are the remaining roadmap, ordered by value vs complexity.
 > Feature selection based on competitive analysis of Todoist, TickTick, Habitica, and Linear (May 2026).
 
 ---
@@ -118,6 +118,34 @@
 - [x] TodoForm — priority + due date grid changed to `grid-cols-1 sm:grid-cols-2` (stacks on mobile)
 - [x] AddTodoPage / EditTodoPage — card padding `p-4 sm:p-6`
 - [x] Navbar — icon-only on mobile (`sm:hidden` / `hidden sm:inline`), username badge hidden on mobile, compact height `h-14 sm:h-16`
+
+---
+
+## Phase 8a — Auth Security & Code Quality ✅
+
+> Findings from code review of Phase 8 (commit `26207ed`). Fix security issues before adding new features.
+> Severity ratings: CRITICAL = must fix before any deployment · HIGH = fix before next merge · MEDIUM = fix this phase · LOW = cleanup
+
+### CRITICAL
+
+- [x] **JWT_SECRET ต้อง required** — แก้ `claude-todo-backend/src/config/users.ts:21` จาก `?? "fallback-string"` เป็น throw Error ตอน module load ถ้าไม่ set env var; อัปเดต `docker-compose.yml` ให้ inject `JWT_SECRET=<random-256-bit>` ด้วย
+
+### HIGH
+
+- [x] **`hydrate()` ตรวจ token expiry** — ใน `auth.store.ts:25-36` decode JWT payload (parse base64 middle segment) แล้วเทียบ `exp * 1000` กับ `Date.now()`; ถ้า expired ให้ clear localStorage แทนที่จะ `set({ token, user })`
+- [x] **Refactor `/api/auth/me` ให้ใช้ `requireAuth` middleware** — `auth.routes.ts:41-58` copy-paste logic ซ้ำกับ `auth.middleware.ts`; แทนที่ด้วย `router.get("/me", requireAuth, (req, res) => { ... })` แล้วอ่าน user จาก `req.user`
+- [x] **ลบ `console.log` จาก `app.ts`** — `app.ts:63-66` มี 4 console.log ใน `app.listen`; แทนที่ด้วย structured logger (`pino`) หรือลบออก ตาม project coding rules
+
+### MEDIUM
+
+- [x] **แก้ double navigation ใน `LoginPage`** — `LoginPage.tsx` navigate ซ้ำกัน 2 ที่ (`handleSubmit:20` และ `useEffect:15`); เลือกทางเดียว — ให้ `useEffect` เป็น primary (handles page-refresh case) แล้วลบ navigate ใน `handleSubmit`
+- [x] **เพิ่ม missing `useEffect` deps** — `LoginPage.tsx:15` ขาด `navigate`; `App.tsx:33` ขาด `hydrate`; เพิ่มให้ครบเพื่อผ่าน `exhaustive-deps` ESLint rule
+- [x] **แก้ unsafe type cast ใน `auth.store.ts`** — ใช้ `ApiResponse<{ token; user }>` + `res.data.data!` แทน `as unknown as`; แก้ bug จริงที่ login เคย set `token = undefined`
+- [x] **Rate limit `/api/auth/login`** — ติดตั้ง `express-rate-limit`; เพิ่ม limiter (max 10 req / 15 min per IP) บน `POST /api/auth/login` ก่อน Zod validate middleware
+
+### LOW
+
+- [x] **แยก user `id` ออกจาก `username`** — `config/users.ts` ทั้ง 2 users มี `id === username`; เปลี่ยน `id` เป็น opaque nanoid string เพื่อรองรับกรณีที่ username เปลี่ยนในอนาคต
 
 ---
 

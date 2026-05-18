@@ -60,10 +60,7 @@ app.use(errorHandler);
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Todo API running at http://localhost:${PORT}`);
-  console.log(`📦 Health: http://localhost:${PORT}/health`);
-  console.log(`🔐 Auth:   http://localhost:${PORT}/api/auth/login`);
-  console.log(`📋 Todos:  http://localhost:${PORT}/api/todos\n`);
+  process.stdout.write(`Todo API running at http://localhost:${PORT}\n`);
 });
 
 export default app;
