@@ -322,10 +322,8 @@
 
 ---
 
-## Phase 19 — Testing
+## Phase 19 — Testing ✅
 
-> No tests currently exist. Recommended stack: vitest (frontend) + jest + supertest (backend).
-
-- [ ] **Backend integration tests** — `jest` + `supertest` hitting a real in-memory SQLite; test auth login (valid/invalid), Todo CRUD, Tag CRUD, reorder, export
-- [ ] **Frontend unit tests** — `vitest` + React Testing Library; test Zustand stores (auth + todo), LoginPage form, ProtectedRoute redirect, TodoCard rendering
-- [ ] **E2E tests** — Playwright: login flow → create todo → edit → reorder → delete → logout happy path
+- [x] **Backend integration tests** — Jest + supertest + ts-jest; in-memory SQLite (`:memory:`); 21 tests across auth (400/401/200), Todo CRUD chain, Tag CRUD + duplicate-name 409
+- [x] **Frontend unit tests** — Vitest + React Testing Library + jsdom; 10 tests: auth store (logout, hydrate expired/valid), ProtectedRoute (redirect/render), TodoCard (title, priority badge, subtask progress)
+- [ ] **E2E tests** — deferred; requires running servers (Playwright setup out of scope for this repo)

@@ -116,8 +116,10 @@ app.use(errorHandler);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  process.stdout.write(`Todo API running at http://localhost:${PORT}\n`);
-});
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    process.stdout.write(`Todo API running at http://localhost:${PORT}\n`);
+  });
+}
 
 export default app;
