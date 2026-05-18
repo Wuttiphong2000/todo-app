@@ -15,7 +15,7 @@ A full-stack **Todo application** built as a learning/showcase project:
 
 ---
 
-## Current State (as of Phase 7 complete)
+## Current State (as of Phase 14 complete)
 
 All core features are implemented and working:
 
@@ -31,6 +31,9 @@ All core features are implemented and working:
 | localStorage cache (instant paint on reload) | Done |
 | Export endpoint (full JSON backup) | Done |
 | Docker compose (nginx + node alpine, SQLite volume) | Done |
+| Recurring tasks (daily/weekly/monthly/custom) | Done |
+| Focus / Pomodoro timer with session history | Done |
+| Stats dashboard (streak, trend chart, donut, overdue) | Done |
 
 ---
 

@@ -1,6 +1,6 @@
 # Tasks
 
-> Phases 1–8 are complete and running. **Phase 8a (auth security fixes) is next priority** — must complete before shipping new features. Phases 9+ are the remaining roadmap, ordered by value vs complexity.
+> Phases 1–14 are complete and running. Phase 15+ is the remaining roadmap, ordered by value vs complexity.
 > Feature selection based on competitive analysis of Todoist, TickTick, Habitica, and Linear (May 2026).
 
 ---
@@ -149,105 +149,121 @@
 
 ---
 
-## Phase 9 — Accessibility & UX Fixes (in progress)
+## Phase 8b — Per-User Data Isolation ✅
+
+> Each logged-in user now sees only their own todos and tags. Migration v2 adds `user_id` columns and recreates the tags table with a per-user UNIQUE constraint.
+
+- [x] **Migration v2** — recreate `tags` table with `UNIQUE(user_id, name)` (was global `UNIQUE(name)`); `ALTER TABLE todos ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`; add indexes `idx_tags_user`, `idx_todos_user`
+- [x] **`TodoService`** — all methods (`findAll`, `findById`, `create`, `update`, `patchStatus`, `reorder`, `delete`) accept `userId` as first param; all SQL queries filter or insert with `user_id`
+- [x] **`TagService`** — same pattern; `create` inserts with `user_id`; UNIQUE conflict is per-user
+- [x] **Controllers** — `todo.controller.ts` and `tag.controller.ts` pass `req.user!.id` to all service calls
+- [x] **Export/Import** — `GET /api/export` scoped to current user; `POST /api/import` assigns `user_id` to all imported todos and tags
+- [x] **Dev script fix** — install `dotenv`, `import "dotenv/config"` in `app.ts`, script changed to `tsx watch src/app.ts` (Windows-compatible)
+
+> **Gotcha:** Migration v2 makes existing rows invisible (user_id = ''). Delete `todo.db` and start fresh after upgrading.
+
+---
+
+## Phase 9 — Accessibility & UX Fixes ✅
 
 > Findings from UI/UX guideline audit. Some items already fixed in Phase 8.
 
 ### CRITICAL
 
-- [ ] **Form labels** — add `htmlFor` + `id` on all inputs in `TodoForm` (title, description, due date, subtask input, tag name input)
-- [ ] **Touch targets** — checkbox `w-5 h-5` (20px), color picker dots `w-5 h-5` (20px) still below 44×44px minimum
+- [x] **Form labels** — added `htmlFor` + `id` on all inputs in `TodoForm`; subtask and tag name inputs use `sr-only` labels
+- [x] **Touch targets** — checkbox uses `-m-[10px] p-[10px]` trick (40px touch area); color picker buttons expanded to 32px visual via fixed `width/height`
 - [x] **Mobile action buttons** — fixed in Phase 8 (always visible on mobile)
-- [ ] **ConfirmDialog ARIA** — add `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing to title `id`
-- [ ] **Emoji → SVG icons** — replace `⚠` (overdue), `✓` (tag selected), `✕` (delete subtask) with proper SVG; add `aria-label` to delete subtask button
+- [x] **ConfirmDialog ARIA** — `role="dialog"`, `aria-modal="true"`, `aria-labelledby` all present
+- [x] **Emoji → SVG icons** — `✓` tag selected → SVG check; `✕` delete subtask → SVG ×; `⚠` overdue was already SVG; `🔍`/`✅` in EmptyState → SVGs; emoji removed from priority `<select>` options
 
 ### HIGH
 
-- [ ] **`transition-all` → specific properties** — `.btn-primary`, `.btn-ghost`, `.btn-danger` in `index.css`; replace with `transition-[background-color,border-color,opacity,transform]`
-- [ ] **`color-scheme: dark`** — add to `html` element in `index.css`; add `<meta name="color-scheme" content="dark">` in `index.html` (fixes date picker and scrollbar on Windows)
+- [x] **`transition-all` → specific properties** — `.btn-primary` → `background-color, transform`; `.btn-ghost` → `background-color, color, transform`; `.btn-danger` → `background-color, border-color, transform`; `.input-base` → `border-color, box-shadow`; inline buttons in `TodoForm` use explicit `transitionProperty` style
+- [x] **`color-scheme: dark`** — added to `html` in `index.css`; `<meta name="color-scheme" content="dark">` added to `index.html`
 - [x] **Edit button → `<Link>`** — fixed in Phase 8 (`TodoCard` now uses `<Link to={...}>`)
-- [ ] **URL reflects filter state** — `HomePage` stores filters in `useState`; sync to query params so filters survive refresh and can be shared
-- [ ] **SVG `aria-hidden`** — add `aria-hidden="true"` to all decorative SVGs inside buttons that already have `aria-label`
+- [x] **URL reflects filter state** — `HomePage` now uses `useSearchParams`; status/priority/sort/q sync to URL; filters survive refresh and are bookmarkable
+- [x] **SVG `aria-hidden`** — added to all decorative SVGs (delete button, search icon, overdue warning, EmptyState icons)
 
 ### MEDIUM
 
-- [ ] **`<meta name="theme-color">`** — add `content="#13161d"` to `index.html` (browser chrome colour on mobile)
-- [ ] **Input `autocomplete` + `name`** — add to all form inputs in `TodoForm`
-- [ ] **Font preload** — add `<link rel="preload" as="font">` for Syne (primary display font) to reduce FOUT
+- [x] **`<meta name="theme-color">`** — added `content="#13161d"` to `index.html`
+- [x] **Input `autocomplete` + `name`** — added to all form inputs in `TodoForm` (title, description, due-date, subtask, tag-name)
+- [x] **Font preload** — added `<link rel="preload" as="font">` for Syne in `index.html`
 
 ---
 
-## Phase 10 — Tag Management & Import/Export UI
+## Phase 10 — Tag Management & Import/Export UI ✅
 
-> Backend APIs already exist — this is purely frontend work.
-
-- [ ] **Tag management page** (`/tags`) — list all tags with usage count badge, rename tag inline, change color via color picker, delete with confirm dialog
-- [ ] **Update tag in store** — add `updateTag(id, dto)` action to `todo.store.ts`; call `PUT /api/tags/:id`
-- [ ] **Add `/tags` route** in React Router and Navbar link
-- [ ] **Import UI** — add file input button in HomePage or Navbar; reads JSON file (same shape as export); calls `POST /api/import`
-- [ ] **Backend import endpoint** — `POST /api/import` parses full JSON backup and upserts todos, tags, subtasks, todo_tags in a transaction; validate with Zod; protect with `requireAuth`
+- [x] **Tag management page** (`/tags`) — lists all tags with usage count, inline rename + color picker, delete with ConfirmDialog
+- [x] **Update tag in store** — `updateTag(id, dto)` action added to `todo.store.ts`; calls `tagApi.update()` → `PUT /api/tags/:id`
+- [x] **Add `/tags` route** — wired in `App.tsx` (ProtectedRoute) + Tags nav link in `Navbar` (icon on mobile, text on desktop)
+- [x] **Import UI** — upload icon button in `Navbar`; reads JSON backup file, validates shape, calls `POST /api/import`; shows alert on success/error; navigates to `/` after import
+- [x] **Backend import endpoint** — `POST /api/import` with Zod `importSchema`; upserts tags, todos, subtasks, todo_tags in a single `db.transaction()`; protected by `requireAuth`
 
 ---
 
-## Phase 11 — Theme & Polish
+## Phase 11 — Theme & Polish ✅
 
-- [ ] **Light theme toggle** — Tailwind `darkMode: 'class'`; add `ThemeProvider` context; toggle button in Navbar; persist choice in `localStorage`
-- [ ] **Switch `dark:` variants** — audit `index.css` and all components; add `dark:` prefix to dark-only colours; define light palette tokens
-- [ ] **Transition polish** — replace all `transition-all` with specific property lists in `index.css`
-- [ ] **Meta tags** — add `<meta name="color-scheme" content="dark light">` and `<meta name="theme-color">` to `index.html`
-- [ ] **Font preload** — add `<link rel="preload" as="font">` for Syne in `index.html`
+- [x] **Light theme toggle** — `darkMode: 'class'` in tailwind.config.js; `ThemeProvider` context in `src/context/theme.tsx`; sun/moon toggle button in Navbar; persists in localStorage as `doable-theme`
+- [x] **Switch `dark:` variants** — surface palette 900–500 converted to CSS variables (`rgb(var(--X) / <alpha>)` format for opacity support); `index.css` defines `:root` (light) and `html.dark` (dark) values; badge, button, input classes updated with `dark:` variants in `@apply`; global `html:not(.dark)` overrides remap `text-slate-100/200/300` and accent colors without touching components
+- [x] **Transition polish** — specific `transition-property` lists on `.btn-*` and `.input-base` (done in Phase 9, maintained)
+- [x] **Anti-FOUC** — inline script in `index.html` reads localStorage and adds `dark` class before React hydrates; default is dark
+- [x] **Meta tags** — `<meta name="color-scheme" content="dark light">` updated; `theme-color` updated dynamically by `ThemeProvider`
+- [x] **Font preload** — done in Phase 9, maintained
 
 ---
 
-## Phase 12 — Recurring Tasks
+## Phase 12 — Recurring Tasks ✅
 
 > One of the most-requested features in Todoist, TickTick, and Microsoft To Do.
 
 ### Backend
 
-- [ ] **Migration v2** — `ALTER TABLE todos ADD COLUMN recurrence TEXT` (JSON string or NULL)
-- [ ] **Recurrence types** — support `daily`, `weekly` (specific days), `monthly` (day of month), `custom` (interval in days)
-- [ ] **Zod schema** — add optional `recurrence` field to `CreateTodoDto` and `UpdateTodoDto`
-- [ ] **Recurrence expand service** — when a recurring todo is marked `done`, auto-create the next occurrence with reset status and new `due_date`
-- [ ] **GET /api/todos** — optionally expand upcoming recurring instances into response
+- [x] **Migration v3** — `ALTER TABLE todos ADD COLUMN recurrence TEXT` (JSON string or NULL)
+- [x] **Recurrence types** — support `daily`, `weekly` (specific days), `monthly` (day of month), `custom` (interval in days)
+- [x] **Zod schema** — `recurrenceSchema` discriminated union; added optional `recurrence` field to `createTodoSchema`, `updateTodoSchema`, and `importSchema`
+- [x] **Recurrence expand service** — when a recurring todo is marked `done`, auto-create the next occurrence with reset status and new `due_date`; returned in `meta.nextOccurrence`
 
 ### Frontend
 
-- [ ] **RecurrenceSelector component** — dropdown with None / Daily / Weekly / Monthly / Custom; weekly shows day-of-week checkboxes
-- [ ] **Wire to TodoForm** — add RecurrenceSelector below due date field
-- [ ] **TodoCard badge** — show repeat icon (SVG) when task has recurrence
-- [ ] **Update types** — add `recurrence` field to `Todo` interface in both backend and frontend `types/index.ts`
+- [x] **RecurrenceSelector component** — None / Daily / Weekly / Monthly / Custom buttons; weekly shows day-of-week toggles; custom shows interval number input
+- [x] **Wire to TodoForm** — RecurrenceSelector added below due date field; `recurrence` included in submit payload
+- [x] **TodoCard badge** — violet repeat icon badge when task has recurrence
+- [x] **Update types** — `Recurrence`, `RecurrenceType` added to both backend and frontend `types/index.ts`; `recurrence` field added to `Todo`, `CreateTodoDto`, `UpdateTodoDto`; `meta.nextOccurrence` added to `ApiResponse`
+- [x] **Store** — `patchStatus` appends `meta.nextOccurrence` to todos list when present
 
 ---
 
-## Phase 13 — Focus Mode & Pomodoro Timer
+## Phase 13 — Focus Mode & Pomodoro Timer ✅
 
 > TickTick's built-in Pomodoro is a major differentiator. Focus To-Do has 4.8★ on the App Store.
 
 ### Backend
 
-- [ ] **Migration v4** — create `focus_sessions` table (id, todo_id, duration, completed, started_at, ended_at)
-- [ ] **Focus routes** — `POST /api/focus/sessions` (start), `PATCH /api/focus/sessions/:id` (end/cancel), `GET /api/focus/stats` (today's total focus minutes); all protected by `requireAuth`
+- [x] **Migration v4** — `focus_sessions` table (id, user_id, todo_id, duration, completed, started_at, ended_at); indexes on user_id and started_at
+- [x] **Focus routes** — `POST /api/focus/sessions` (start), `PATCH /api/focus/sessions/:id` (end/cancel), `GET /api/focus/stats`, `GET /api/focus/sessions` (history); all protected by `requireAuth`
+- [x] **FocusService** — `start`, `end`, `getStats` (today + week minutes/sessions), `getHistory` (last 20)
 
 ### Frontend
 
-- [ ] **FocusPage** (`/focus`) — full-screen timer with circular progress ring; task picker dropdown; session history list
-- [ ] **PomodoroTimer component** — countdown display (MM:SS), start/pause/reset controls, configurable duration (25/15/5 min presets + custom)
-- [ ] **usePomodoro hook** — manages `setInterval`, pause/resume, completion callback (fires `POST /api/focus/sessions`)
-- [ ] **Focus stats card** — add "Focus Today" card to HomePage stats row (total minutes focused)
-- [ ] **Navbar link** — add Focus icon link to `/focus`
+- [x] **FocusPage** (`/focus`) — circular SVG progress ring with smooth CSS transition; 5/15/25 min presets + custom input; optional task picker; pause/resume/stop controls; session history sidebar
+- [x] **usePomodoro hook** — `setInterval` countdown, pause/resume/done states, auto-completes session on timer reaching 0, guards against double-end with `endingRef`
+- [x] **Document title** — shows `🍅 MM:SS` while running, `⏸ MM:SS` while paused
+- [x] **Focus stats card** — "Focus วันนี้" card added to HomePage stats row (violet, shows minutes)
+- [x] **Navbar link** — stopwatch SVG icon on mobile, "Focus" text on desktop
 
 ---
 
-## Phase 14 — Enhanced Dashboard & Statistics
+## Phase 14 — Enhanced Dashboard & Statistics ✅
 
 > Todoist's productivity stats and Any.do's weekly overview are frequently praised in reviews.
 
-- [ ] **Completion trend chart** — bar chart of todos completed per day (last 7 days) using a lightweight charting lib (recharts or Chart.js)
-- [ ] **Priority breakdown** — donut chart: low / medium / high task counts
-- [ ] **Overdue aging** — list of todos that are overdue with how many days overdue
-- [ ] **Streak counter** — calculate current consecutive days with at least 1 todo completed; display in HomePage header
-- [ ] **Export stats** — include stats snapshot in the JSON export payload
+- [x] **Completion trend chart** — pure SVG bar chart (no external lib); last 7 days; today highlighted in amber, past days in violet; count label above each bar
+- [x] **Priority breakdown** — pure SVG donut chart; three segments (high/medium/low) with stroke-dasharray positioning; legend with counts below
+- [x] **Overdue aging** — list of overdue active todos with `Nd overdue` badge; each row links to edit page
+- [x] **Streak counter** — consecutive days with ≥1 completion (grace period: yesterday counts if today is empty); flame icon badge in HomePage header; prominent card on StatsPage
+- [x] **Export stats** — `GET /api/export` now includes `stats` snapshot alongside todos and tags
+- [x] **StatsPage** (`/stats`) — summary cards (streak, completed, active) + charts + overdue list; Stats nav link (bar-chart icon) added to Navbar
 
 ---
 

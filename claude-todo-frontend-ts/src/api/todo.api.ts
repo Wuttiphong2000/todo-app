@@ -2,6 +2,7 @@
 import client from "./client";
 import type {
   Todo,
+  Tag,
   CreateTodoDto,
   UpdateTodoDto,
   TodoQueryParams,
@@ -30,7 +31,7 @@ export const todoApi = {
   },
 
   patchStatus: async (id: string, status: Todo["status"]) => {
-    const res = await client.patch<ApiResponse<Todo>>(`/todos/${id}/status`, {
+    const res = await client.patch<ApiResponse<Todo> & { meta?: { nextOccurrence?: Todo } }>(`/todos/${id}/status`, {
       status,
     });
     return res.data;
@@ -42,5 +43,13 @@ export const todoApi = {
 
   delete: async (id: string) => {
     await client.delete(`/todos/${id}`);
+  },
+
+  importBackup: async (backup: { todos: Todo[]; tags: Tag[] }) => {
+    const res = await client.post<ApiResponse<{ imported: { todos: number; tags: number } }>>(
+      "/import",
+      backup
+    );
+    return res.data;
   },
 };

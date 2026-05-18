@@ -57,28 +57,33 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
           {/* Drag handle */}
           {dragHandle}
 
-          {/* Checkbox */}
+          {/* Checkbox — visual is 20px but touch target is 40px via negative margin */}
           <button
             onClick={handleToggleDone}
-            className={cn(
-              "mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-all duration-150",
-              todo.status === "done"
-                ? "bg-accent border-accent text-surface-950"
-                : "border-surface-500 hover:border-accent"
-            )}
-            aria-label="Toggle done"
+            className="mt-0.5 flex-shrink-0 -m-[10px] p-[10px] flex items-center justify-center"
+            aria-label={todo.status === "done" ? "Mark as pending" : "Mark as done"}
           >
-            {todo.status === "done" && (
-              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
-                <path
-                  d="M2 6l3 3 5-5"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            )}
+            <span
+              className={cn(
+                "w-5 h-5 rounded-md border-2 flex items-center justify-center",
+                "transition-colors duration-150",
+                todo.status === "done"
+                  ? "bg-accent border-accent text-surface-950"
+                  : "border-surface-500 hover:border-accent"
+              )}
+            >
+              {todo.status === "done" && (
+                <svg aria-hidden="true" className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                  <path
+                    d="M2 6l3 3 5-5"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </span>
           </button>
 
           {/* Content */}
@@ -105,7 +110,7 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
               className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-surface-700 hover:bg-surface-600 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-all"
               aria-label="Edit"
             >
-              <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" viewBox="0 0 16 16" fill="none">
+              <svg aria-hidden="true" className="w-4 h-4 sm:w-3.5 sm:h-3.5" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M11.5 2.5l2 2-9 9H2.5v-2l9-9z"
                   stroke="currentColor"
@@ -120,7 +125,7 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
               className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-surface-700 hover:bg-red-900/40 flex items-center justify-center text-slate-400 hover:text-red-400 transition-all"
               aria-label="Delete"
             >
-              <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" viewBox="0 0 16 16" fill="none">
+              <svg aria-hidden="true" className="w-4 h-4 sm:w-3.5 sm:h-3.5" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M2 4h12M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"
                   stroke="currentColor"
@@ -170,6 +175,18 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
             </span>
           ))}
 
+          {/* Recurrence badge */}
+          {todo.recurrence && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400 font-mono flex items-center gap-1">
+              <svg aria-hidden="true" className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 4h10a4 4 0 0 1 0 8H3M1 4l3-3M1 4l3 3" />
+              </svg>
+              {todo.recurrence.type === "custom"
+                ? `every ${todo.recurrence.interval}d`
+                : todo.recurrence.type}
+            </span>
+          )}
+
           {/* Due date */}
           {todo.dueDate && (
             <span
@@ -178,7 +195,11 @@ export default function TodoCard({ todo, tags, dragHandle }: Props) {
                 overdue ? "text-red-400" : "text-slate-500"
               )}
             >
-              {overdue ? "⚠ " : ""}
+              {overdue && (
+                <svg aria-hidden="true" className="inline w-3 h-3 mr-0.5 -mt-0.5" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 1a.5.5 0 0 1 .44.26l6.5 11A.5.5 0 0 1 14.5 13h-13a.5.5 0 0 1-.44-.74l6.5-11A.5.5 0 0 1 8 1zm0 4a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 1 0v-3A.5.5 0 0 0 8 5zm0 6a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"/>
+                </svg>
+              )}
               {formatDate(todo.dueDate)}
             </span>
           )}

@@ -224,13 +224,16 @@ PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS tags (
   id         TEXT PRIMARY KEY,
-  name       TEXT NOT NULL UNIQUE,
+  user_id    TEXT NOT NULL DEFAULT '',
+  name       TEXT NOT NULL,
   color      TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  UNIQUE (user_id, name)          -- per-user uniqueness (migration v2)
 );
 
 CREATE TABLE IF NOT EXISTS todos (
   id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL DEFAULT '',  -- per-user isolation (migration v2)
   title        TEXT NOT NULL,
   description  TEXT,
   status       TEXT NOT NULL DEFAULT 'pending'
@@ -492,7 +495,7 @@ Reusable CSS component classes (defined in `@layer components`):
 
 ## Authentication
 
-> **Design decision:** No registration. Exactly 2 users are hardcoded with bcrypt-hashed passwords. Todos are **shared** between both users — both see the same task list. The login layer exists purely to prevent unauthenticated access from the outside.
+> **Design decision:** No registration. Exactly 2 users are hardcoded with bcrypt-hashed passwords. Each user sees **only their own todos and tags** — data is fully isolated by `user_id`. The login layer controls access and determines whose data is shown.
 
 ### Users
 

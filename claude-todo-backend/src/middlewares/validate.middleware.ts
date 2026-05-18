@@ -5,6 +5,13 @@ import { z, ZodSchema } from "zod";
  
 const prioritySchema = z.enum(["low", "medium", "high"]);
 const statusSchema = z.enum(["pending", "in_progress", "done"]);
+
+const recurrenceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("daily") }),
+  z.object({ type: z.literal("weekly"), days: z.array(z.number().int().min(0).max(6)).min(1) }),
+  z.object({ type: z.literal("monthly") }),
+  z.object({ type: z.literal("custom"), interval: z.number().int().min(1).max(365) }),
+]);
  
 export const createTodoSchema = z.object({
   title: z.string().min(1, "Title is required").max(255),
@@ -19,6 +26,7 @@ export const createTodoSchema = z.object({
   subtasks: z
     .array(z.object({ title: z.string().min(1).max(255) }))
     .optional(),
+  recurrence: recurrenceSchema.nullable().optional(),
 });
  
 export const updateTodoSchema = z.object({
@@ -42,6 +50,7 @@ export const updateTodoSchema = z.object({
     )
     .optional(),
   order: z.number().int().min(0).optional(),
+  recurrence: recurrenceSchema.nullable().optional(),
 });
  
 export const patchStatusSchema = z.object({
@@ -83,6 +92,68 @@ export const todoQuerySchema = z.object({
   sortDir: z.enum(["asc", "desc"]).optional(),
 });
  
+export const importSchema = z.object({
+  todos: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string().min(1).max(255),
+      description: z.string().nullable(),
+      status: statusSchema,
+      priority: prioritySchema,
+      tagIds: z.array(z.string()),
+      subtasks: z.array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          completed: z.boolean(),
+          createdAt: z.string(),
+        })
+      ),
+      dueDate: z.string().nullable(),
+      recurrence: recurrenceSchema.nullable().optional(),
+      order: z.number().int().min(0),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+      completedAt: z.string().nullable(),
+    })
+  ),
+  tags: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string().min(1).max(50),
+      color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+      createdAt: z.string(),
+    })
+  ),
+});
+
+export const startFocusSchema = z.object({
+  todoId: z.string().nullable().optional(),
+  duration: z.number().int().min(60).max(7200),
+});
+
+export const endFocusSchema = z.object({
+  completed: z.boolean(),
+});
+
+export const createHabitSchema = z.object({
+  title: z.string().min(1).max(100),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  frequency: z.enum(["daily", "weekly"]).optional(),
+  targetDays: z.array(z.number().int().min(0).max(6)).optional(),
+});
+
+export const updateHabitSchema = z.object({
+  title: z.string().min(1).max(100).optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  frequency: z.enum(["daily", "weekly"]).optional(),
+  targetDays: z.array(z.number().int().min(0).max(6)).optional(),
+});
+
+export const logHabitSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
 // ── Middleware Factory ─────────────────────────────────────────────────────────
  
 export function validateBody<T>(schema: ZodSchema<T>) {

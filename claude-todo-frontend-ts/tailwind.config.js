@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  darkMode: "class",
   theme: {
     screens: {
       xs:  "420px",
@@ -12,14 +13,14 @@ export default {
     },
     extend: {
       colors: {
-        // ── Dark base palette ──────────────────────────────
+        // ── Surface palette (CSS-variable-driven, see index.css) ──
         surface: {
-          950: "#0d0f14",   // darkest bg
-          900: "#13161d",   // page bg
-          800: "#1a1e28",   // card bg
-          700: "#222738",   // elevated card
-          600: "#2c3347",   // border / hover
-          500: "#3b4260",   // muted borders
+          950: "#0d0f14",   // hardcoded — always dark (used for text on accent, modal backdrop)
+          900: "rgb(var(--surface-900) / <alpha-value>)",
+          800: "rgb(var(--surface-800) / <alpha-value>)",
+          700: "rgb(var(--surface-700) / <alpha-value>)",
+          600: "rgb(var(--surface-600) / <alpha-value>)",
+          500: "rgb(var(--surface-500) / <alpha-value>)",
         },
         // ── Accent: warm amber ─────────────────────────────
         accent: {

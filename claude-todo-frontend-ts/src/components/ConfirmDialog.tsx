@@ -46,10 +46,16 @@ export default function ConfirmDialog({
       <div className="absolute inset-0 bg-surface-950/80 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className="relative card p-6 w-full max-w-sm shadow-danger animate-scale-in">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        className="relative card p-6 w-full max-w-sm shadow-danger animate-scale-in"
+      >
         {/* Icon */}
         <div className="w-12 h-12 rounded-2xl bg-red-600/15 border border-red-600/20 flex items-center justify-center mb-4 mx-auto">
           <svg
+            aria-hidden="true"
             className="w-6 h-6 text-red-400"
             fill="none"
             viewBox="0 0 24 24"
@@ -60,7 +66,7 @@ export default function ConfirmDialog({
           </svg>
         </div>
 
-        <h2 className="font-display font-bold text-lg text-center text-slate-100 mb-2">
+        <h2 id="confirm-dialog-title" className="font-display font-bold text-lg text-center text-slate-100 mb-2">
           {title}
         </h2>
         <p className="text-sm text-slate-400 text-center leading-relaxed mb-6">

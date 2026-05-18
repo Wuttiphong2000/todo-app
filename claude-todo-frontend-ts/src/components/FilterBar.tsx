@@ -23,9 +23,9 @@ const STATUS_OPTIONS: { value: Status | ""; label: string }[] = [
 
 const PRIORITY_OPTIONS: { value: Priority | ""; label: string }[] = [
   { value: "", label: "Priority ทั้งหมด" },
-  { value: "high", label: "🔴 High" },
-  { value: "medium", label: "🟡 Medium" },
-  { value: "low", label: "🔵 Low" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
 ];
 
 export default function FilterBar({ filters, onChange }: Props) {
@@ -34,6 +34,7 @@ export default function FilterBar({ filters, onChange }: Props) {
       {/* Row 1: Search */}
       <div className="relative">
         <svg
+          aria-hidden="true"
           className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
           fill="none"
           viewBox="0 0 24 24"

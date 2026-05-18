@@ -4,7 +4,7 @@
   "description": "Todo App REST API",
   "main": "dist/app.js",
   "scripts": {
-    "dev": "node --env-file=.env node_modules/.bin/tsx watch src/app.ts",
+    "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
     "lint": "eslint src/**/*.ts"
@@ -13,6 +13,7 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
     "jsonwebtoken": "^9.0.3",

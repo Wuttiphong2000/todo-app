@@ -9,6 +9,7 @@ import type {
   UpdateTodoDto,
   TodoQueryParams,
   CreateTagDto,
+  UpdateTagDto,
 } from "@/types";
 
 interface TodoStore {
@@ -28,7 +29,11 @@ interface TodoStore {
   // ── Tags ──
   fetchTags: () => Promise<void>;
   createTag: (dto: CreateTagDto) => Promise<Tag>;
+  updateTag: (id: string, dto: UpdateTagDto) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
+
+  // ── Backup ──
+  importBackup: (backup: { todos: Todo[]; tags: Tag[] }) => Promise<{ todos: number; tags: number }>;
 
   // ── Helpers ──
   clearError: () => void;
@@ -70,20 +75,17 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
     set((s) => ({
       todos: s.todos.map((t) =>
         t.id === id
-          ? {
-              ...t,
-              status,
-              completedAt:
-                status === "done" ? new Date().toISOString() : null,
-            }
+          ? { ...t, status, completedAt: status === "done" ? new Date().toISOString() : null }
           : t
       ),
     }));
     try {
       const res = await todoApi.patchStatus(id, status);
-      set((s) => ({
-        todos: s.todos.map((t) => (t.id === id ? res.data : t)),
-      }));
+      set((s) => {
+        const updated = s.todos.map((t) => (t.id === id ? res.data : t));
+        const next = res.meta?.nextOccurrence;
+        return { todos: next ? [...updated, next] : updated };
+      });
     } catch (e) {
       // Rollback on error
       await get().fetchTodos();
@@ -123,6 +125,13 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
     return res.data;
   },
 
+  updateTag: async (id, dto) => {
+    const res = await tagApi.update(id, dto);
+    set((s) => ({
+      tags: s.tags.map((t) => (t.id === id ? res.data : t)),
+    }));
+  },
+
   deleteTag: async (id) => {
     await tagApi.delete(id);
     set((s) => ({
@@ -132,6 +141,12 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
         tagIds: todo.tagIds.filter((tid) => tid !== id),
       })),
     }));
+  },
+
+  importBackup: async (backup) => {
+    const res = await todoApi.importBackup(backup);
+    await Promise.all([get().fetchTags(), get().fetchTodos()]);
+    return res.data.imported;
   },
 
   clearError: () => set({ error: null }),
