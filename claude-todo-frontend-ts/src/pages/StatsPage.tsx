@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useAuthStore } from "@/store/auth.store";
 import { statsApi } from "@/api/stats.api";
 import { cn } from "@/utils";
 import type { DashboardStats } from "@/types";
@@ -108,12 +109,29 @@ function DonutChart({ breakdown }: { breakdown: DashboardStats["priorityBreakdow
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function StatsPage() {
+  const isGuest = useAuthStore((s) => s.isGuest);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isGuest) return;
     statsApi.getStats().then((r) => setStats(r.data)).finally(() => setLoading(false));
-  }, []);
+  }, [isGuest]);
+
+  if (isGuest) {
+    return (
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+        <div className="card p-10 flex flex-col items-center gap-4 text-center">
+          <svg className="w-12 h-12 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <h2 className="text-lg font-semibold text-slate-300">Statistics ต้องการบัญชี</h2>
+          <p className="text-sm text-slate-500 max-w-xs">Stats ต้องการข้อมูล Focus session จาก server — Login เพื่อดู statistics แบบเต็ม</p>
+          <Link to="/login" className="btn-primary px-6 py-2">Login</Link>
+        </div>
+      </main>
+    );
+  }
 
   if (loading) {
     return (

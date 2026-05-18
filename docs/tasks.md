@@ -364,8 +364,8 @@
 - [x] ปุ่ม "Export" (download localStorage data เป็น JSON) และ "Login" (redirect ไป `/login`)
 - [x] เพิ่มใน `App.tsx` ด้านบน router outlet
 
-### Pages — Guest Restrictions
+### Pages — Guest Restrictions ✅
 
-- [ ] `FocusPage` — แสดง "Login เพื่อใช้ Focus Timer (ต้องบันทึก session บน server)" เมื่อ guest
-- [ ] `StatsPage` — แสดง stats จาก localStorage todos ได้บางส่วน (streak / completion) หรือ disable ก็ได้
-- [ ] หน้าอื่น (Home, Add, Edit, Tags, Habits, Calendar) — ทำงานได้ปกติในฐานะ guest
+- [x] `FocusPage` — แสดง "Login เพื่อใช้ Focus Timer" เมื่อ guest (Focus ต้องบันทึก session บน server)
+- [x] `StatsPage` — แสดง "Login เพื่อดู Statistics" เมื่อ guest
+- [x] หน้าอื่น (Home, Add, Edit, Tags, Habits, Calendar) — ทำงานได้ปกติในฐานะ guest

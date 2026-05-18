@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
+import { useAuthStore } from "@/store/auth.store";
 import { useTodoStore } from "@/store/todo.store";
 import { focusApi } from "@/api/focus.api";
 import { usePomodoro } from "@/hooks/usePomodoro";
@@ -25,6 +27,7 @@ function formatDuration(s: number) {
 }
 
 export default function FocusPage() {
+  const isGuest = useAuthStore((s) => s.isGuest);
   const { todos } = useTodoStore();
   const { status, remaining, totalSeconds, start, pause, resume, stop, reset } = usePomodoro();
 
@@ -73,6 +76,21 @@ export default function FocusPage() {
     "#F59E0B";
 
   const activeTodo = todos.find((t) => t.id === selectedTodoId);
+
+  if (isGuest) {
+    return (
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+        <div className="card p-10 flex flex-col items-center gap-4 text-center">
+          <svg className="w-12 h-12 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
+          </svg>
+          <h2 className="text-lg font-semibold text-slate-300">Focus Timer ต้องการบัญชี</h2>
+          <p className="text-sm text-slate-500 max-w-xs">Focus session ต้องบันทึกบน server เพื่อให้ stats ถูกต้อง — Login เพื่อใช้งาน</p>
+          <Link to="/login" className="btn-primary px-6 py-2">Login</Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
