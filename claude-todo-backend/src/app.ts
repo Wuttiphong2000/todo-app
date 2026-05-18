@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import todoRoutes from "./routes/todo.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -25,6 +27,8 @@ app.set("trust proxy", 1);
 
 // ── Global Middlewares ────────────────────────────────────────────────────────
 
+app.use(helmet());
+
 app.use(
   cors({
     origin: process.env.CLIENT_URL ?? "http://localhost:5173",
@@ -35,6 +39,32 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ── Rate Limiters ─────────────────────────────────────────────────────────────
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests, please try again later." } },
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: "RATE_LIMITED", message: "Too many login attempts, please try again later." } },
+});
+
+const guestVisitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
+});
 
 // ── Health Check (public) ─────────────────────────────────────────────────────
 
@@ -47,7 +77,7 @@ app.get("/health", (_req, res) => {
 
 // ── Public Routes ─────────────────────────────────────────────────────────────
 
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", loginLimiter, authRoutes);
 
 // ── Protected Routes ──────────────────────────────────────────────────────────
 
@@ -77,7 +107,8 @@ app.post("/api/import", requireAuth, validateBody(importSchema), async (req, res
           `INSERT INTO tags (id, user_id, name, color, created_at)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (id) DO UPDATE SET
-             user_id = EXCLUDED.user_id, name = EXCLUDED.name, color = EXCLUDED.color`,
+             name = EXCLUDED.name, color = EXCLUDED.color
+           WHERE tags.user_id = $2`,
           [tag.id, userId, tag.name, tag.color, tag.createdAt]
         );
       }
@@ -87,10 +118,11 @@ app.post("/api/import", requireAuth, validateBody(importSchema), async (req, res
           `INSERT INTO todos (id, user_id, title, description, status, priority, due_date, order_index, created_at, updated_at, completed_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (id) DO UPDATE SET
-             user_id = EXCLUDED.user_id, title = EXCLUDED.title, description = EXCLUDED.description,
+             title = EXCLUDED.title, description = EXCLUDED.description,
              status = EXCLUDED.status, priority = EXCLUDED.priority, due_date = EXCLUDED.due_date,
              order_index = EXCLUDED.order_index, updated_at = EXCLUDED.updated_at,
-             completed_at = EXCLUDED.completed_at`,
+             completed_at = EXCLUDED.completed_at
+           WHERE todos.user_id = $2`,
           [todo.id, userId, todo.title, todo.description ?? null, todo.status, todo.priority,
            todo.dueDate ?? null, todo.order, todo.createdAt, todo.updatedAt, todo.completedAt ?? null]
         );
@@ -117,11 +149,11 @@ app.post("/api/import", requireAuth, validateBody(importSchema), async (req, res
   } catch (e) { next(e); }
 });
 
-app.use("/api/todos", requireAuth, todoRoutes);
-app.use("/api/tags", requireAuth, tagRoutes);
-app.use("/api/focus", requireAuth, focusRoutes);
-app.use("/api/habits", requireAuth, habitRoutes);
-app.use("/api/stats", requireAuth, statsRoutes);
+app.use("/api/todos", apiLimiter, requireAuth, todoRoutes);
+app.use("/api/tags", apiLimiter, requireAuth, tagRoutes);
+app.use("/api/focus", apiLimiter, requireAuth, focusRoutes);
+app.use("/api/habits", apiLimiter, requireAuth, habitRoutes);
+app.use("/api/stats", apiLimiter, requireAuth, statsRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
 // ── Error Handlers (ต้องอยู่ท้ายสุด) ─────────────────────────────────────────

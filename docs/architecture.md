@@ -536,10 +536,10 @@ Reusable CSS component classes (defined in `@layer components`):
 
 ### Users
 
-| Username | Password | Notes |
-|----------|----------|-------|
-| `nxmpexng` | `01092004` | Stored as bcrypt hash (rounds=12) |
-| `wskt` | `kirikaya43` | Stored as bcrypt hash (rounds=12) |
+| Username | Notes |
+|----------|-------|
+| `nxmpexng` | Stored as bcrypt hash (rounds=12) in `config/users.ts` |
+| `wskt` | Stored as bcrypt hash (rounds=12) in `config/users.ts` |
 
 Passwords are **never stored in plaintext** anywhere in the codebase. Hashes live in `claude-todo-backend/src/config/users.ts`.
 
