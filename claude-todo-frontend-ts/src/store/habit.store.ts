@@ -93,7 +93,7 @@ export const useHabitStore = create<HabitState>((set) => ({
     set((s) => ({ habits: s.habits.map((h) => (h.id === id ? res.data : h)) }));
   },
 
-  unlogHabit: async (id, _date) => {
+  unlogHabit: async (id, date) => {
     if (useAuthStore.getState().isGuest) {
       set((s) => {
         const habits = s.habits.map((h) => {
