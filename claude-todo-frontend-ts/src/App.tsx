@@ -29,7 +29,7 @@ function AppShell() {
   return (
     <div className="min-h-screen bg-surface-900">
       <Navbar />
-      {isGuest && <GuestBanner />
+      {isGuest && <GuestBanner />}
       <Routes>
         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/add" element={<ProtectedRoute><AddTodoPage /></ProtectedRoute>} />
