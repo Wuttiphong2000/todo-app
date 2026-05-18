@@ -10,7 +10,6 @@ function loadHabits(): Habit[] {
 function saveHabits(habits: Habit[]) {
   localStorage.setItem("guest_habits", JSON.stringify(habits));
 }
-function today() { return new Date().toISOString().slice(0, 10); }
 
 interface HabitState {
   habits: Habit[];
@@ -46,8 +45,9 @@ export const useHabitStore = create<HabitState>((set) => ({
       const now = new Date().toISOString();
       const habit: Habit = {
         id: nanoid(), title: dto.title, color: dto.color ?? "#6366f1",
-        frequency: dto.frequency ?? "daily", targetDays: dto.targetDays ?? null,
-        createdAt: now, logs: [],
+        frequency: dto.frequency ?? "daily", targetDays: dto.targetDays ?? [],
+        streak: 0, completedToday: false, last7Days: Array(7).fill(false),
+        createdAt: now,
       };
       set((s) => { const habits = [...s.habits, habit]; saveHabits(habits); return { habits }; });
       return habit;
@@ -77,12 +77,13 @@ export const useHabitStore = create<HabitState>((set) => ({
 
   logHabit: async (id) => {
     if (useAuthStore.getState().isGuest) {
-      const date = today();
-      const logEntry = { id: nanoid(), habitId: id, userId: "guest", date, createdAt: new Date().toISOString() };
       set((s) => {
-        const habits = s.habits.map((h) =>
-          h.id === id ? { ...h, logs: [...(h.logs ?? []).filter((l) => l.date !== date), logEntry] } : h
-        );
+        const habits = s.habits.map((h) => {
+          if (h.id !== id) return h;
+          const last7Days = [...h.last7Days];
+          last7Days[6] = true;
+          return { ...h, completedToday: true, streak: h.streak + 1, last7Days };
+        });
         saveHabits(habits);
         return { habits };
       });
@@ -92,12 +93,15 @@ export const useHabitStore = create<HabitState>((set) => ({
     set((s) => ({ habits: s.habits.map((h) => (h.id === id ? res.data : h)) }));
   },
 
-  unlogHabit: async (id, date) => {
+  unlogHabit: async (id, _date) => {
     if (useAuthStore.getState().isGuest) {
       set((s) => {
-        const habits = s.habits.map((h) =>
-          h.id === id ? { ...h, logs: (h.logs ?? []).filter((l) => l.date !== date) } : h
-        );
+        const habits = s.habits.map((h) => {
+          if (h.id !== id) return h;
+          const last7Days = [...h.last7Days];
+          last7Days[6] = false;
+          return { ...h, completedToday: false, streak: Math.max(0, h.streak - 1), last7Days };
+        });
         saveHabits(habits);
         return { habits };
       });

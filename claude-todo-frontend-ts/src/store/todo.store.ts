@@ -65,7 +65,7 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
       let todos = loadGuest<Todo>(GT);
       if (params?.status) todos = todos.filter((t) => t.status === params.status);
       if (params?.priority) todos = todos.filter((t) => t.priority === params.priority);
-      if (params?.q) todos = todos.filter((t) => t.title.toLowerCase().includes(params.q!.toLowerCase()));
+      if (params?.search) todos = todos.filter((t) => t.title.toLowerCase().includes(params.search!.toLowerCase()));
       set({ todos, loading: false });
       return;
     }
