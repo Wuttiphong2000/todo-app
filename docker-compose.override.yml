@@ -1,0 +1,20 @@
+# Local development overrides — applied automatically by `docker compose up`
+# Bind-mounts src/ so backend hot-reloads without rebuilding the image.
+# Frontend still uses the nginx build; run `npm run dev` locally for HMR.
+
+services:
+  backend:
+    build:
+      target: builder
+    command: npx tsx watch src/app.ts
+    volumes:
+      - todo_data:/data
+      - ./claude-todo-backend/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      DB_PATH: /data/todo-dev.db
+      CLIENT_URL: http://localhost:5173
+      JWT_SECRET: dev-secret-change-in-production
+    ports:
+      - "3000:3000"

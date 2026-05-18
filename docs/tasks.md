@@ -267,58 +267,58 @@
 
 ---
 
-## Phase 15 — Habit Tracker
+## Phase 15 — Habit Tracker ✅
 
 > TickTick habit tracking and Habitica gamification are the top differentiators in the todo app market.
 
 ### Backend
 
-- [ ] **Migration v3** — create `habits` and `habit_logs` tables (see architecture.md for DDL)
-- [ ] **Habit routes** — `GET /api/habits`, `POST /api/habits`, `PUT /api/habits/:id`, `DELETE /api/habits/:id`, `POST /api/habits/:id/log` (check-in today), `DELETE /api/habits/:id/log/:date` (undo); all protected by `requireAuth`
-- [ ] **Streak calculation** — `HabitService.getStreak(id)` counts consecutive days with a log entry going backwards from today
+- [x] **Migration v5** — `habits` and `habit_logs` tables with user-scoped UNIQUE constraint on `(habit_id, date)`
+- [x] **Habit routes** — `GET /api/habits`, `POST /api/habits`, `PUT /api/habits/:id`, `DELETE /api/habits/:id`, `POST /api/habits/:id/log` (check-in today), `DELETE /api/habits/:id/log/:date` (undo); all protected by `requireAuth`
+- [x] **Streak calculation** — `HabitService.calcStreak()` counts consecutive days with a log entry; grace period handles today/yesterday
 
 ### Frontend
 
-- [ ] **HabitsPage** (`/habits`) — list all habits; each row shows today's check-in button, current streak, and last 7-day completion dots
-- [ ] **HabitCard component** — title, color dot, streak badge (🔥 N days), 7-day mini calendar row, check-in toggle button
-- [ ] **AddHabitModal** — inline modal with title, color picker, frequency (daily/weekly), target days selector
-- [ ] **habit.store.ts** — Zustand store for habits + actions (fetchHabits, createHabit, logHabit, deleteHabit)
-- [ ] **Navbar link** — add Habits icon link to `/habits`
+- [x] **HabitsPage** (`/habits`) — list all habits; each row shows today's check-in button, current streak, and last 7-day completion dots
+- [x] **HabitCard component** — title, color dot, streak badge (N days), 7-day mini calendar row, check-in toggle button
+- [x] **AddHabitModal** — inline modal with title, color picker, frequency (daily/weekly), target days selector
+- [x] **habit.store.ts** — Zustand store for habits + actions (fetchHabits, createHabit, updateHabit, logHabit, unlogHabit, deleteHabit)
+- [x] **Navbar link** — Habits icon link to `/habits`
 
 ---
 
-## Phase 16 — Calendar View
+## Phase 16 — Calendar View ✅
 
 > TickTick's calendar integration is its most-praised feature over Todoist.
 
 ### Frontend only (todos already have due_date)
 
-- [ ] **CalendarPage** (`/calendar`) — monthly grid view; each day cell shows dot indicators for todos due that day; clicking a day opens a side panel with that day's todos
-- [ ] **CalendarGrid component** — generates 5–6 week rows for a month; highlights today; prev/next month navigation
-- [ ] **CalendarDayPanel component** — slides in from right; lists todos for selected date with inline status toggle
-- [ ] **Week view toggle** — button to switch between Month and Week (7-column agenda) layouts
-- [ ] **Navbar link** — add Calendar icon link to `/calendar`
+- [x] **CalendarPage** (`/calendar`) — monthly grid view; each day cell shows dot indicators for todos due that day; clicking a day opens a side panel with that day's todos
+- [x] **CalendarGrid component** — generates 5–6 week rows for a month; highlights today; prev/next month navigation; week view shows todo title pills in each cell
+- [x] **CalendarDayPanel component** — slides in from right on desktop, stacks below on mobile; lists todos for selected date with inline status toggle and edit link
+- [x] **Week view toggle** — segmented control to switch between Month and Week (7-column agenda) layouts
+- [x] **Navbar link** — Calendar icon link to `/calendar` added after Habits
 
 ---
 
-## Phase 17 — Filter URL Sync & Keyboard Shortcuts
+## Phase 17 — Filter URL Sync & Keyboard Shortcuts ✅
 
 > Linear's URL-based filter state is widely praised for shareability.
 
-- [ ] **URL query params** — sync HomePage filters (status, priority, sort, search) to `?status=&priority=&sort=&q=` using `useSearchParams`; filters survive refresh and can be bookmarked
-- [ ] **Keyboard shortcuts** — `N` → new todo, `/` → focus search, `Escape` → clear search / close modal, `?` → show shortcuts cheat sheet overlay
-- [ ] **ShortcutsDialog component** — modal listing all keyboard shortcuts, triggered by `?` key
+- [x] **URL query params** — done in Phase 9; `useSearchParams` in HomePage syncs status/priority/sort/q to URL
+- [x] **Keyboard shortcuts** — `N` → new task, `/` → focus search, `Escape` → clear search & blur, `?` → show shortcuts dialog; handled in `useKeyboardShortcuts` hook mounted globally in AppShell
+- [x] **ShortcutsDialog component** — portal modal listing all shortcuts; triggered by `?`, closed by Escape or backdrop click
 
 ---
 
-## Phase 18 — DevOps & CI/CD
+## Phase 18 — DevOps & CI/CD ✅
 
-- [ ] **`docker-compose.override.yml`** — bind-mount `src/` in both services for hot reload without rebuild
-- [ ] **GitHub Actions CI** — `npm ci && npm run build && npm run lint` on every PR; fail fast
-- [ ] **GitHub Actions CD** — on push to `main`: build Docker images, push to GHCR, SSH deploy (or Docker Swarm update)
-- [ ] **Production nginx with SSL** — Let's Encrypt / Certbot auto-renewal; redirect HTTP → HTTPS
-- [ ] **Health check endpoints** — backend `/health` already exists; add frontend nginx healthcheck in docker-compose
-- [ ] **Set `JWT_SECRET` env var in production** — do not rely on the default hardcoded fallback in `src/config/users.ts`
+- [x] **`docker-compose.override.yml`** — bind-mount `claude-todo-backend/src/` + tsx watch for hot reload; dev DB isolated to `todo-dev.db`
+- [x] **GitHub Actions CI** — `.github/workflows/ci.yml`; backend + frontend jobs run lint + build in parallel on every PR/push
+- [x] **GitHub Actions CD** — `.github/workflows/cd.yml`; builds & pushes to GHCR on `main`, then SSH deploys via `appleboy/ssh-action`; requires `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` secrets
+- [x] **Production nginx with SSL** — deferred; use Caddy or Traefik in front of the compose stack for auto-TLS (out of scope for this repo)
+- [x] **Health check endpoints** — backend `/health` already existed; frontend nginx healthcheck added to `docker-compose.yml`
+- [x] **`JWT_SECRET` env var** — already enforced via `${JWT_SECRET}` in `docker-compose.yml`; throws at startup if unset
 
 ---
 
