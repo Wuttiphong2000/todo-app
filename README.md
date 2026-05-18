@@ -30,7 +30,7 @@ A full-stack productivity app with todos, habits, focus timer, and a calendar �
 | Backend | Node.js · Express · TypeScript · better-sqlite3 · Zod · JWT |
 | Frontend | React 18 · Vite · TypeScript · Tailwind CSS · Zustand · Axios |
 | Testing | Jest + supertest (backend) · Vitest + React Testing Library (frontend) |
-| DevOps | Docker Compose · nginx · GitHub Actions (CI + CD to GHCR) |
+| DevOps | Docker Compose · nginx · GitHub Actions (CI + CD to GHCR) · Railway |
 
 ---
 
@@ -61,7 +61,20 @@ npm run dev                  # http://localhost:5173
 
 The Vite dev server proxies `/api/*` to `http://localhost:3000` automatically.
 
-### Docker (production)
+### Railway (production — live)
+
+Frontend: `https://independent-nature-production-12ef.up.railway.app`
+
+Two Railway services in the same project, each built from its subdirectory via Dockerfile:
+
+| Service | Root Directory | Key env vars |
+|---------|---------------|-------------|
+| backend | `claude-todo-backend` | `JWT_SECRET`, `PORT=3000`, `DB_PATH=/data/todo.db`, `CLIENT_URL` |
+| frontend | `claude-todo-frontend-ts` | `PORT=80`, `BACKEND_URL=https://<backend>.up.railway.app` |
+
+SQLite data persists in a Railway Volume mounted at `/data` on the backend service.
+
+### Docker (self-hosted)
 
 ```bash
 # Generate a random secret
@@ -116,7 +129,7 @@ node -e "const b=require('bcryptjs'); console.log(b.hashSync('yourpassword', 12)
 │   │   ├── hooks/              # useLocalSync · useKeyboardShortcuts · usePomodoro
 │   │   ├── context/theme.tsx   # Light/dark ThemeProvider
 │   │   └── __tests__/          # Vitest unit tests
-│   ├── nginx.conf              # SPA fallback + /api/ proxy (Docker only)
+│   ├── nginx.conf.template     # SPA fallback + /api/ proxy (env-var substitution for PORT and BACKEND_URL)
 │   └── Dockerfile
 ├── .github/workflows/
 │   ├── ci.yml                  # Lint + build on every PR
