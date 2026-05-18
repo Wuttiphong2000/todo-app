@@ -1,6 +1,6 @@
 // src/App.tsx
 import { useEffect, useState, useCallback } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import GuestBanner from "@/components/GuestBanner";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -15,9 +15,13 @@ import FocusPage from "@/pages/FocusPage";
 import HabitsPage from "@/pages/HabitsPage";
 import CalendarPage from "@/pages/CalendarPage";
 import StatsPage from "@/pages/StatsPage";
+import DashboardPage from "@/pages/DashboardPage";
 import { useLocalSync } from "@/hooks/useLocalSync";
 import { useAuthStore } from "@/store/auth.store";
 import { ThemeProvider } from "@/context/theme";
+
+// Hydrate synchronously before any component renders so isGuest is set immediately
+useAuthStore.getState().hydrate();
 
 function AppShell() {
   useLocalSync();
@@ -39,10 +43,17 @@ function AppShell() {
         <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
         <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
         <Route path="/stats" element={<ProtectedRoute><StatsPage /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><AdminRoute><DashboardPage /></AdminRoute></ProtectedRoute>} />
       </Routes>
       <ShortcutsDialog open={showShortcuts} onClose={() => setShowShortcuts(false)} />
     </div>
   );
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (user?.username !== "wskt") return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 export default function App() {

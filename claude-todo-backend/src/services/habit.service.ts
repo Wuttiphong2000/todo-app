@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { db } from "../db/database.js";
+import { pool } from "../db/database.js";
 import type { Habit, CreateHabitDto, UpdateHabitDto } from "../types/index.js";
 
 interface HabitRow {
@@ -36,7 +36,6 @@ function calcStreak(logDates: Set<string>): number {
 function toHabit(row: HabitRow, logDates: Set<string>): Habit {
   const today = getDateString(0);
   const last7Days = Array.from({ length: 7 }, (_, i) => logDates.has(getDateString(6 - i)));
-
   return {
     id: row.id,
     title: row.title,
@@ -50,96 +49,115 @@ function toHabit(row: HabitRow, logDates: Set<string>): Habit {
   };
 }
 
+async function getLogDates(habitId: string): Promise<Set<string>> {
+  const { rows } = await pool.query<{ date: string }>(
+    "SELECT date FROM habit_logs WHERE habit_id = $1",
+    [habitId]
+  );
+  return new Set(rows.map((r) => r.date));
+}
+
 class HabitService {
-  private getLogDates(habitId: string): Set<string> {
-    const rows = db
-      .prepare("SELECT date FROM habit_logs WHERE habit_id = ?")
-      .all(habitId) as { date: string }[];
-    return new Set(rows.map((r) => r.date));
+  async findAll(userId: string): Promise<Habit[]> {
+    const { rows } = await pool.query<HabitRow>(
+      "SELECT * FROM habits WHERE user_id = $1 ORDER BY created_at ASC",
+      [userId]
+    );
+    return Promise.all(rows.map(async (row) => toHabit(row, await getLogDates(row.id))));
   }
 
-  findAll(userId: string): Habit[] {
-    const rows = db
-      .prepare("SELECT * FROM habits WHERE user_id = ? ORDER BY created_at ASC")
-      .all(userId) as HabitRow[];
-    return rows.map((row) => toHabit(row, this.getLogDates(row.id)));
+  async findById(userId: string, id: string): Promise<Habit | undefined> {
+    const { rows } = await pool.query<HabitRow>(
+      "SELECT * FROM habits WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    if (rows.length === 0) return undefined;
+    return toHabit(rows[0], await getLogDates(id));
   }
 
-  findById(userId: string, id: string): Habit | undefined {
-    const row = db
-      .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
-      .get(id, userId) as HabitRow | undefined;
-    if (!row) return undefined;
-    return toHabit(row, this.getLogDates(id));
-  }
-
-  create(userId: string, dto: CreateHabitDto): Habit {
+  async create(userId: string, dto: CreateHabitDto): Promise<Habit> {
     const id = nanoid();
     const now = new Date().toISOString();
     const color = dto.color ?? "#6366f1";
     const frequency = dto.frequency ?? "daily";
     const targetDays = dto.targetDays ?? [];
+    const targetDaysJson = targetDays.length ? JSON.stringify(targetDays) : null;
 
-    db.prepare(
-      "INSERT INTO habits (id, user_id, title, color, frequency, target_days, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, userId, dto.title, color, frequency, targetDays.length ? JSON.stringify(targetDays) : null, now);
+    await pool.query(
+      "INSERT INTO habits (id, user_id, title, color, frequency, target_days, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [id, userId, dto.title, color, frequency, targetDaysJson, now]
+    );
 
     return toHabit(
-      { id, user_id: userId, title: dto.title, color, frequency, target_days: targetDays.length ? JSON.stringify(targetDays) : null, created_at: now },
+      { id, user_id: userId, title: dto.title, color, frequency, target_days: targetDaysJson, created_at: now },
       new Set()
     );
   }
 
-  update(userId: string, id: string, dto: UpdateHabitDto): Habit | undefined {
-    const row = db
-      .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
-      .get(id, userId) as HabitRow | undefined;
-    if (!row) return undefined;
+  async update(userId: string, id: string, dto: UpdateHabitDto): Promise<Habit | undefined> {
+    const { rows } = await pool.query<HabitRow>(
+      "SELECT * FROM habits WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    if (rows.length === 0) return undefined;
+    const row = rows[0];
 
     const title = dto.title ?? row.title;
     const color = dto.color ?? row.color;
     const frequency = dto.frequency ?? row.frequency;
-    const targetDays = dto.targetDays !== undefined ? dto.targetDays : (row.target_days ? (JSON.parse(row.target_days) as number[]) : []);
+    const targetDays =
+      dto.targetDays !== undefined
+        ? dto.targetDays
+        : row.target_days
+        ? (JSON.parse(row.target_days) as number[])
+        : [];
     const target_days = targetDays.length ? JSON.stringify(targetDays) : null;
 
-    db.prepare(
-      "UPDATE habits SET title = ?, color = ?, frequency = ?, target_days = ? WHERE id = ?"
-    ).run(title, color, frequency, target_days, id);
+    await pool.query(
+      "UPDATE habits SET title = $1, color = $2, frequency = $3, target_days = $4 WHERE id = $5",
+      [title, color, frequency, target_days, id]
+    );
 
-    return toHabit({ ...row, title, color, frequency, target_days }, this.getLogDates(id));
+    return toHabit({ ...row, title, color, frequency, target_days }, await getLogDates(id));
   }
 
-  delete(userId: string, id: string): boolean {
-    const result = db
-      .prepare("DELETE FROM habits WHERE id = ? AND user_id = ?")
-      .run(id, userId);
-    return result.changes > 0;
+  async delete(userId: string, id: string): Promise<boolean> {
+    const { rowCount } = await pool.query(
+      "DELETE FROM habits WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    return (rowCount ?? 0) > 0;
   }
 
-  log(userId: string, habitId: string, date?: string): Habit | undefined {
-    const row = db
-      .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
-      .get(habitId, userId) as HabitRow | undefined;
-    if (!row) return undefined;
+  async log(userId: string, habitId: string, date?: string): Promise<Habit | undefined> {
+    const { rows } = await pool.query<HabitRow>(
+      "SELECT * FROM habits WHERE id = $1 AND user_id = $2",
+      [habitId, userId]
+    );
+    if (rows.length === 0) return undefined;
 
     const logDate = date ?? getDateString(0);
-    db.prepare(
-      "INSERT OR IGNORE INTO habit_logs (id, habit_id, user_id, date, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(nanoid(), habitId, userId, logDate, new Date().toISOString());
+    await pool.query(
+      "INSERT INTO habit_logs (id, habit_id, user_id, date, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (habit_id, date) DO NOTHING",
+      [nanoid(), habitId, userId, logDate, new Date().toISOString()]
+    );
 
-    return toHabit(row, this.getLogDates(habitId));
+    return toHabit(rows[0], await getLogDates(habitId));
   }
 
-  unlog(userId: string, habitId: string, date: string): Habit | undefined {
-    const row = db
-      .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
-      .get(habitId, userId) as HabitRow | undefined;
-    if (!row) return undefined;
+  async unlog(userId: string, habitId: string, date: string): Promise<Habit | undefined> {
+    const { rows } = await pool.query<HabitRow>(
+      "SELECT * FROM habits WHERE id = $1 AND user_id = $2",
+      [habitId, userId]
+    );
+    if (rows.length === 0) return undefined;
 
-    db.prepare("DELETE FROM habit_logs WHERE habit_id = ? AND user_id = ? AND date = ?")
-      .run(habitId, userId, date);
+    await pool.query(
+      "DELETE FROM habit_logs WHERE habit_id = $1 AND user_id = $2 AND date = $3",
+      [habitId, userId, date]
+    );
 
-    return toHabit(row, this.getLogDates(habitId));
+    return toHabit(rows[0], await getLogDates(habitId));
   }
 }
 

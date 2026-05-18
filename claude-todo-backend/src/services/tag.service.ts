@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { db } from "../db/database.js";
+import { pool } from "../db/database.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import type { Tag, CreateTagDto, UpdateTagDto } from "../types/index.js";
 
@@ -16,24 +16,32 @@ function toTag(row: TagRow): Tag {
 }
 
 class TagService {
-  findAll(userId: string): Tag[] {
-    return (
-      db.prepare("SELECT * FROM tags WHERE user_id = ? ORDER BY created_at ASC").all(userId) as TagRow[]
-    ).map(toTag);
+  async findAll(userId: string): Promise<Tag[]> {
+    const { rows } = await pool.query<TagRow>(
+      "SELECT * FROM tags WHERE user_id = $1 ORDER BY created_at ASC",
+      [userId]
+    );
+    return rows.map(toTag);
   }
 
-  findById(userId: string, id: string): Tag | undefined {
-    const row = db.prepare("SELECT * FROM tags WHERE id = ? AND user_id = ?").get(id, userId) as TagRow | undefined;
-    return row ? toTag(row) : undefined;
+  async findById(userId: string, id: string): Promise<Tag | undefined> {
+    const { rows } = await pool.query<TagRow>(
+      "SELECT * FROM tags WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    return rows[0] ? toTag(rows[0]) : undefined;
   }
 
-  create(userId: string, dto: CreateTagDto): Tag {
+  async create(userId: string, dto: CreateTagDto): Promise<Tag> {
     const id = nanoid();
     const createdAt = new Date().toISOString();
     try {
-      db.prepare("INSERT INTO tags (id, user_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)").run(id, userId, dto.name, dto.color, createdAt);
+      await pool.query(
+        "INSERT INTO tags (id, user_id, name, color, created_at) VALUES ($1, $2, $3, $4, $5)",
+        [id, userId, dto.name, dto.color, createdAt]
+      );
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === "SQLITE_CONSTRAINT_UNIQUE") {
+      if ((err as { code?: string }).code === "23505") {
         throw new AppError(409, "TAG_ALREADY_EXISTS", `Tag name "${dto.name}" already exists`);
       }
       throw err;
@@ -41,25 +49,33 @@ class TagService {
     return { id, name: dto.name, color: dto.color, createdAt };
   }
 
-  update(userId: string, id: string, dto: UpdateTagDto): Tag | undefined {
-    const exists = db.prepare("SELECT id FROM tags WHERE id = ? AND user_id = ?").get(id, userId);
-    if (!exists) return undefined;
+  async update(userId: string, id: string, dto: UpdateTagDto): Promise<Tag | undefined> {
+    const { rows } = await pool.query(
+      "SELECT id FROM tags WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    if (rows.length === 0) return undefined;
 
     const sets: string[] = [];
     const vals: unknown[] = [];
-    if (dto.name !== undefined)  { sets.push("name = ?");  vals.push(dto.name); }
-    if (dto.color !== undefined) { sets.push("color = ?"); vals.push(dto.color); }
+
+    if (dto.name !== undefined)  { vals.push(dto.name);  sets.push(`name = $${vals.length}`); }
+    if (dto.color !== undefined) { vals.push(dto.color); sets.push(`color = $${vals.length}`); }
 
     if (sets.length > 0) {
-      db.prepare(`UPDATE tags SET ${sets.join(", ")} WHERE id = ?`).run(...vals, id);
+      vals.push(id);
+      await pool.query(`UPDATE tags SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals);
     }
 
     return this.findById(userId, id);
   }
 
-  delete(userId: string, id: string): boolean {
-    const result = db.prepare("DELETE FROM tags WHERE id = ? AND user_id = ?").run(id, userId);
-    return result.changes > 0;
+  async delete(userId: string, id: string): Promise<boolean> {
+    const { rowCount } = await pool.query(
+      "DELETE FROM tags WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    return (rowCount ?? 0) > 0;
   }
 }
 
