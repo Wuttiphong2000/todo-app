@@ -29,9 +29,8 @@ Full-stack Todo application แบบ Monorepo ประกอบด้วย 2 
 │   └─────────┘  └────────────┘  └────────┬─────────┘ │
 │                                         │            │
 │                               ┌─────────▼──────────┐ │
-│                               │  DatabaseService   │ │
-│                               │  better-sqlite3    │ │
-│                               │    todo.db         │ │
+│                               │     pg Pool        │ │
+│                               │   PostgreSQL DB    │ │
 │                               └────────────────────┘ │
 └─────────────────────────────────────────────────────┘
 ```
@@ -51,7 +50,7 @@ Full-stack Todo application แบบ Monorepo ประกอบด้วย 2 
 | ID Generation | nanoid | 3.3.7 (CJS) |
 | CORS | cors | 2.8.5 |
 | Dev Runtime | tsx watch | 4.15.6 |
-| Database | SQLite via better-sqlite3 | latest |
+| Database | PostgreSQL via pg | 8.x |
 
 ### Frontend — `claude-todo-frontend-ts/`
 
@@ -74,7 +73,7 @@ Full-stack Todo application แบบ Monorepo ประกอบด้วย 2 
 ### Layer Pattern (Strict Order)
 
 ```
-Request → Routes → Middleware (Zod) → Controllers → Services → DatabaseService → todo.db
+Request → Routes → Middleware (Zod) → Controllers → Services → pg Pool → PostgreSQL
 ```
 
 ### Source Structure
@@ -90,8 +89,10 @@ src/
 │   ├── auth.routes.ts        # POST /api/auth/login, GET /api/auth/me  (public)
 │   ├── todo.routes.ts        # GET/POST/PUT/DELETE /api/todos           (protected)
 │   ├── tag.routes.ts         # GET/POST/PUT/DELETE /api/tags            (protected)
-│   ├── habit.routes.ts       # (planned) GET/POST/PUT/DELETE /api/habits
-│   └── focus.routes.ts       # (planned) POST /api/focus/sessions
+│   ├── habit.routes.ts       # GET/POST/PUT/DELETE /api/habits
+│   ├── focus.routes.ts       # POST /api/focus/sessions
+│   ├── stats.routes.ts       # GET /api/stats
+│   └── analytics.routes.ts   # POST /api/analytics/guest-visit, GET /api/analytics/dashboard
 ├── middlewares/
 │   ├── auth.middleware.ts    # ★ requireAuth — jwt.verify + attaches req.user
 │   ├── validate.middleware.ts # Zod schema factory → 400 เมื่อ invalid
@@ -99,16 +100,19 @@ src/
 ├── controllers/
 │   ├── todo.controller.ts    # รับ req/res → เรียก TodoService
 │   ├── tag.controller.ts     # รับ req/res → เรียก TagService
-│   ├── habit.controller.ts   # (planned)
-│   └── focus.controller.ts   # (planned)
+│   ├── habit.controller.ts   # Habit CRUD + log/unlog
+│   ├── focus.controller.ts   # Session start/end + stats
+│   └── stats.controller.ts   # Streak + completion trend
 ├── services/
 │   ├── todo.service.ts       # Business logic: CRUD, filter, reorder, recurrence expand
 │   ├── tag.service.ts        # Business logic: tag management
-│   ├── habit.service.ts      # (planned) streak calc, check-in
-│   └── focus.service.ts      # (planned) session CRUD, daily stats
+│   ├── habit.service.ts      # Streak calc, check-in, unlog
+│   ├── focus.service.ts      # Session CRUD, daily stats
+│   ├── stats.service.ts      # Streak + completion trend queries
+│   └── analytics.service.ts  # Guest visit tracking, admin dashboard stats
 └── db/
-    ├── database.ts           # Singleton better-sqlite3 instance + PRAGMA setup
-    └── migrations.ts         # รัน SQL migration ตามลำดับ version
+    ├── database.ts           # pg Pool + initDb() (runs migrations) + withTransaction()
+    └── migrations.ts         # Versioned SQL migrations v1–v6
 ```
 
 ### API Response Envelope
@@ -126,15 +130,15 @@ src/
 
 ---
 
-## Database Design (SQLite)
+## Database Design (PostgreSQL)
 
-### เหตุผลที่เลือก `better-sqlite3`
-- API แบบ **synchronous** — ไม่ต้องใช้ async/await ในชั้น DB
-- รองรับ TypeScript ได้ดี มี `@types/better-sqlite3`
-- เร็วที่สุดในกลุ่ม SQLite libraries ของ Node.js
-- รองรับ prepared statements และ transactions ในตัว
+### เหตุผลที่เลือก PostgreSQL + `pg`
+- รองรับ concurrent connections ผ่าน connection pool (`max: 10`)
+- Railway PostgreSQL plugin ให้ `DATABASE_URL` อัตโนมัติ — zero-config deployment
+- `BOOLEAN`, `SERIAL`, และ `ILIKE` รองรับ native ไม่ต้อง workaround
+- Async/await API เข้ากันได้กับ Express error handling pattern
 
-### Current Schema — 4 Tables (implemented)
+### Current Schema — 7 Tables (implemented)
 
 ```
 ┌──────────────┐        ┌───────────────┐
@@ -216,24 +220,21 @@ CREATE INDEX IF NOT EXISTS idx_focus_sessions_todo ON focus_sessions(todo_id);
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_date ON focus_sessions(started_at);
 ```
 
-### Current SQL DDL (implemented)
+### Current SQL DDL (implemented — PostgreSQL)
 
 ```sql
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-
 CREATE TABLE IF NOT EXISTS tags (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL DEFAULT '',
   name       TEXT NOT NULL,
   color      TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  UNIQUE (user_id, name)          -- per-user uniqueness (migration v2)
+  UNIQUE (user_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS todos (
   id           TEXT PRIMARY KEY,
-  user_id      TEXT NOT NULL DEFAULT '',  -- per-user isolation (migration v2)
+  user_id      TEXT NOT NULL DEFAULT '',
   title        TEXT NOT NULL,
   description  TEXT,
   status       TEXT NOT NULL DEFAULT 'pending'
@@ -242,6 +243,7 @@ CREATE TABLE IF NOT EXISTS todos (
                  CHECK (priority IN ('low', 'medium', 'high')),
   due_date     TEXT,
   order_index  INTEGER NOT NULL DEFAULT 0,
+  recurrence   TEXT,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL,
   completed_at TEXT
@@ -251,7 +253,7 @@ CREATE TABLE IF NOT EXISTS subtasks (
   id         TEXT PRIMARY KEY,
   todo_id    TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
   title      TEXT NOT NULL,
-  completed  INTEGER NOT NULL DEFAULT 0,
+  completed  BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TEXT NOT NULL
 );
 
@@ -261,12 +263,46 @@ CREATE TABLE IF NOT EXISTS todo_tags (
   PRIMARY KEY (todo_id, tag_id)
 );
 
+CREATE TABLE IF NOT EXISTS focus_sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  todo_id    TEXT REFERENCES todos(id) ON DELETE SET NULL,
+  duration   INTEGER NOT NULL DEFAULT 25,
+  completed  BOOLEAN NOT NULL DEFAULT FALSE,
+  started_at TEXT NOT NULL,
+  ended_at   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS habits (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  description TEXT,
+  color       TEXT NOT NULL DEFAULT '#f97316',
+  frequency   TEXT NOT NULL DEFAULT 'daily',
+  target_days TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,7]',
+  created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id         TEXT PRIMARY KEY,
+  habit_id   TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL,
+  date       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (habit_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_todos_user     ON todos(user_id);
 CREATE INDEX IF NOT EXISTS idx_todos_status   ON todos(status);
 CREATE INDEX IF NOT EXISTS idx_todos_priority ON todos(priority);
 CREATE INDEX IF NOT EXISTS idx_todos_order    ON todos(order_index);
 CREATE INDEX IF NOT EXISTS idx_subtasks_todo  ON subtasks(todo_id);
 CREATE INDEX IF NOT EXISTS idx_todo_tags_todo ON todo_tags(todo_id);
 CREATE INDEX IF NOT EXISTS idx_todo_tags_tag  ON todo_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_focus_user     ON focus_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_habits_user    ON habits(user_id);
+CREATE INDEX IF NOT EXISTS idx_habit_logs     ON habit_logs(habit_id, date);
 ```
 
 ### Migration System
@@ -284,38 +320,39 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 ---
 
-## DatabaseService (Singleton)
+## pg Pool & Transaction Helper
 
 ```ts
-import Database from 'better-sqlite3';
+import { Pool, PoolClient } from 'pg';
 
-class DatabaseService {
-  private db: Database.Database;
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 
-  constructor() {
-    this.db = new Database('todo.db');
-    this.db.pragma('foreign_keys = ON');
-    this.db.pragma('journal_mode = WAL');
-  }
-
-  getDb(): Database.Database {
-    return this.db;
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
   }
 }
-
-export const databaseService = new DatabaseService();
 ```
 
-Services เรียกผ่าน `databaseService.getDb()` แล้วใช้ prepared statements:
-
-```ts
-const stmt = db.prepare('SELECT * FROM todos WHERE id = ?');
-const row = stmt.get(id);
-```
+Services query directly via `pool.query(sql, params)` for single statements, or receive a `PoolClient` inside `withTransaction` for multi-step operations. Positional placeholders use `$1, $2, …` (PostgreSQL syntax).
 
 ### Mapping: DB Row → TypeScript Interface
 
-SQLite เก็บ `BOOLEAN` เป็น `0/1` และ `Array` เป็น rows แยก ต้องมี mapper:
+`pg` returns `BOOLEAN` columns as JavaScript `boolean` and aggregate functions (COUNT, SUM) as strings. Always coerce aggregates with `Number(row.count)`:
 
 ```ts
 function mapRowToTodo(row: TodoRow, tagIds: string[], subtasks: SubTask[]): Todo {
@@ -326,7 +363,7 @@ function mapRowToTodo(row: TodoRow, tagIds: string[], subtasks: SubTask[]): Todo
     completedAt: row.completed_at ?? null,
     order: row.order_index,
     tagIds,
-    subtasks: subtasks.map(s => ({ ...s, completed: Boolean(s.completed) })),
+    subtasks: subtasks.map(s => ({ ...s, completed: s.completed })), // already boolean
   };
 }
 ```
@@ -601,8 +638,8 @@ Features ranked by **value vs complexity** for a solo showcase project:
 
 ## Key Design Decisions
 
-### 1. SQLite + better-sqlite3
-Synchronous API ของ `better-sqlite3` ทำให้ services ไม่ต้องเปลี่ยนจาก sync เป็น async. รองรับ ACID transactions, foreign key constraints, index-based queries
+### 1. PostgreSQL + pg
+Async pool-based client รองรับ concurrent requests ได้ดี, เข้ากันได้กับ Railway PostgreSQL plugin โดยตรงผ่าน `DATABASE_URL`, รองรับ ACID transactions ผ่าน `withTransaction()` helper, `BOOLEAN` native, `ILIKE` case-insensitive search
 
 ### 2. ตาราง `todo_tags` (Junction Table)
 ความสัมพันธ์ Todo ↔ Tag เป็น many-to-many — ใช้ junction table แทน JSON column เพื่อให้ query และ cascade delete ทำงานถูกต้อง
@@ -640,8 +677,9 @@ Frontend ไม่เคย hardcode port ของ backend. `/api/*` ถูก 
 | Variable | Service | Default | หน้าที่ |
 |----------|---------|---------|--------|
 | `PORT` | Backend | `3000` | Port ที่ Express ฟัง |
+| `DATABASE_URL` | Backend | — | PostgreSQL connection string (required) |
 | `CLIENT_URL` | Backend | `http://localhost:5173` | CORS origin (ใน Docker ใช้ `http://localhost`) |
-| `DB_PATH` | Backend | `./todo.db` | Path ของ SQLite file (ใน Docker ใช้ `/data/todo.db`) |
+| `JWT_SECRET` | Backend | — | JWT signing secret (required, throws at startup if missing) |
 
 ---
 
@@ -664,12 +702,17 @@ Browser
 ┌──────────────────────────────────────┐
 │       node:22-alpine (backend)       │
 │   Express :3000                      │
-│   DB_PATH=/data/todo.db             │
+│   DATABASE_URL=postgresql://...      │
+└──────────────┬───────────────────────┘
+               │ internal Docker network
+               ▼
+┌──────────────────────────────────────┐
+│     postgres:16-alpine               │
+│   Port 5432 (internal only)          │
 └──────────────┬───────────────────────┘
                │ volume mount
                ▼
-          todo_data (named volume)
-              /data/todo.db
+          postgres_data (named volume)
 ```
 
 ### Dockerfile Strategy
@@ -678,7 +721,7 @@ Browser
 
 | Stage | Base | Role |
 |-------|------|------|
-| `builder` | `node:22-alpine` | Installs `python3 make g++` (for better-sqlite3 native compile), runs `tsc` + `npm prune --production` |
+| `builder` | `node:22-alpine` | Runs `npm ci`, `tsc`, `npm prune --production` |
 | `runner` | `node:22-alpine` | Copies pruned `node_modules` + `dist`, runs as non-root `app` user |
 
 **Frontend** (`claude-todo-frontend-ts/Dockerfile`):
@@ -698,11 +741,11 @@ docker compose up --build
 
 ### Key Docker Decisions
 
-**better-sqlite3 on Alpine (musl libc)**
-Prebuilt binaries aren't available for musl; the builder stage installs `python3 make g++ apk` so the native addon compiles from source. The runner copies the already-compiled `node_modules` — no build tools in the final image.
+**PostgreSQL as a separate container**
+`postgres:16-alpine` runs alongside the backend on the internal Docker network. The backend connects via `DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/todoapp`. Data persists in named volume `postgres_data`.
 
-**SQLite persistence**
-Named Docker volume `todo_data` mounted at `/data`. `DB_PATH=/data/todo.db` ensures the file survives container restarts and image rebuilds.
+**No native build tools needed**
+`pg` is a pure JavaScript client — no `python3`/`make`/`g++` required in the builder stage, unlike the old `better-sqlite3` setup.
 
 **CORS in Docker**
 All browser traffic flows through nginx on port 80. `CLIENT_URL=http://localhost` is set in compose.

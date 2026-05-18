@@ -15,7 +15,7 @@ Extended context for anyone continuing work on this repository. Read `CLAUDE.md`
 
 ---
 
-## Current State (Phase 19 — all phases complete)
+## Current State (Phase 22 — all phases complete)
 
 | Feature | Status |
 |---------|--------|
@@ -38,12 +38,14 @@ Extended context for anyone continuing work on this repository. Read `CLAUDE.md`
 | Habit tracker (streaks, 7-day mini calendar, check-in) | Done |
 | Calendar view (month + week, day panel, status toggle) | Done |
 | Keyboard shortcuts (N / / / ? / Escape) | Done |
-| Docker Compose (nginx + node alpine, SQLite volume) | Done |
+| Docker Compose (nginx + node alpine + postgres) | Done |
 | docker-compose.override.yml (hot reload without rebuild) | Done |
 | GitHub Actions CI (lint + build on every PR) | Done |
 | GitHub Actions CD (GHCR push + SSH deploy on main) | Done |
 | Jest integration tests — backend (21 tests) | Done |
 | Vitest unit tests — frontend (10 tests) | Done |
+| Admin analytics dashboard (/dashboard, wskt only) | Done |
+| PostgreSQL migration (pg pool, async services, v1–v6 migrations) | Done |
 
 ---
 
@@ -54,7 +56,7 @@ Extended context for anyone continuing work on this repository. Read `CLAUDE.md`
 ```bash
 # Terminal 1 — backend (port 3000)
 cd claude-todo-backend
-cp ../.env.example .env          # set JWT_SECRET
+cp ../.env.example .env          # set JWT_SECRET and DATABASE_URL
 npm install
 npm run dev
 
@@ -71,15 +73,15 @@ Default credentials: see `.env.example` or ask the project owner (passwords are 
 ### Docker (Production Build)
 
 ```bash
-JWT_SECRET=<random-256-bit> docker compose up --build
+JWT_SECRET=<random-256-bit> POSTGRES_PASSWORD=<password> docker compose up --build
 ```
 
-Open `http://localhost`. nginx serves the frontend and proxies `/api/` to the backend.
+Open `http://localhost`. nginx serves the frontend and proxies `/api/` to the backend. PostgreSQL runs as a separate container.
 
 ### Running Tests
 
 ```bash
-cd claude-todo-backend   && npm test   # 21 Jest integration tests
+cd claude-todo-backend   && npm test   # 21 Jest integration tests (requires DATABASE_URL)
 cd claude-todo-frontend-ts && npm test  # 10 Vitest unit tests
 ```
 
@@ -88,9 +90,9 @@ cd claude-todo-frontend-ts && npm test  # 10 Vitest unit tests
 ## Architecture Decisions Already Made (don't revisit without good reason)
 
 ### Storage
-- **SQLite via `better-sqlite3`** — zero-infrastructure simplicity, synchronous API. DB file at `DB_PATH` env var (`./todo.db` default, `/data/todo.db` in Docker).
-- **6-table schema** — `todos`, `tags`, `subtasks`, `todo_tags`, `focus_sessions`, `habits`, `habit_logs`. All normalized; no JSON columns except `recurrence` (optional JSON string on todos) and `target_days` on habits.
-- **Migration system** — `schema_migrations` table tracks applied versions (v1–v5). Add new entries to `claude-todo-backend/src/db/migrations.ts`.
+- **PostgreSQL via `pg`** — async pool-based queries; `DATABASE_URL` env var sets the connection string. Deployed via Railway PostgreSQL plugin in production; local Docker uses a `postgres:16-alpine` container.
+- **7-table schema** — `todos`, `tags`, `subtasks`, `todo_tags`, `focus_sessions`, `habits`, `habit_logs`. All normalized; no JSON columns except `recurrence` (optional JSON string on todos) and `target_days` on habits.
+- **Migration system** — `schema_migrations` table tracks applied versions (v1–v6). Add new entries to `claude-todo-backend/src/db/migrations.ts`. Migrations run via `initDb()` before `app.listen()`.
 
 ### Auth
 - **2 hardcoded users, no registration** — IDs are opaque nanoid strings (not usernames). Passwords are bcrypt (rounds=12) hashed in `src/config/users.ts`.
@@ -111,7 +113,7 @@ cd claude-todo-frontend-ts && npm test  # 10 Vitest unit tests
 
 ### Docker
 - **nginx proxies `/api/`** — in production the browser talks only to nginx on port 80; the backend is not externally exposed.
-- **Named volume `todo_data`** — never bind-mount the DB file in production; use the named volume.
+- **Named volume `postgres_data`** — PostgreSQL data persists in a named Docker volume; never bind-mount the data directory in production.
 - **`docker-compose.override.yml`** is auto-applied for local dev — overrides backend to run `tsx watch` with bind-mount.
 
 ---
@@ -120,14 +122,16 @@ cd claude-todo-frontend-ts && npm test  # 10 Vitest unit tests
 
 - **`JWT_SECRET` throws at startup** — `src/config/users.ts` calls `throw new Error(...)` at module load if `JWT_SECRET` is not set. Set it in `.env` for local dev.
 - **`NODE_ENV=test` guards `app.listen`** — the backend test setup sets this before importing `app.ts`; without the guard, Jest and supertest would both try to bind port 3000.
-- **`better-sqlite3` on Alpine** requires `python3 make g++` at build time (musl libc, no prebuilt binaries). The backend `Dockerfile` builder stage installs these; the runner stage does not need them.
+- **`DATABASE_URL` is required** — the `pg` pool is created at module load with the connection string; the app will fail to start if the variable is missing or points to an unreachable host.
+- **pg COUNT returns strings** — `pg` returns aggregate results (COUNT, SUM) as strings, not numbers. Always wrap with `Number(row.count)` before arithmetic.
+- **`BOOLEAN` in pg** — subtasks and focus_sessions store `completed` as a real `BOOLEAN`; the value arrives from `pg` as a JavaScript `boolean`, not `0/1`.
 - **Status filter sends `undefined`, not `""`** — `FilterBar` avoids sending `?status=` as an empty query param (Zod rejects it with 400).
 - **`PUT /api/todos/:id` expects full `SubTask[]`** — with `id` and `completed` fields, not just `{ title }[]`. `TodoForm` branches on the `initial` prop: edit mode sends full SubTask shape, create mode sends `{ title }[]` only.
 - **CORS locked to `CLIENT_URL`** — set `CLIENT_URL=*` for unrestricted local testing (do not commit).
 - **`order_index` gaps after delete** — harmless; the frontend sorts by `order_index ASC` and reorder only updates explicitly dragged positions.
-- **Migration v2 makes existing rows invisible** — it adds `user_id TEXT NOT NULL DEFAULT ''` to todos and recreates tags. Existing rows get `user_id = ''` and become invisible. Delete `todo.db` to start fresh after upgrading from pre-Phase-8b data.
 - **Calendar uses `dueDate` only** — todos without a `dueDate` do not appear on the calendar.
 - **Keyboard shortcuts skip when typing** — `useKeyboardShortcuts` checks `target.tagName === "INPUT" | "TEXTAREA" | "SELECT"` before firing. The `?` shortcut uses `e.key === "?"` which naturally requires Shift on most keyboards.
+- **`pg_stat_statements` errors in Railway logs** — harmless; Railway's dashboard queries a PostgreSQL extension that isn't enabled. Not an application error.
 
 ---
 
@@ -145,9 +149,9 @@ D:\vs\
 │   │   ├── app.ts              # ★ Express entry + router mounts
 │   │   ├── config/users.ts     # Hardcoded users + JWT_SECRET validation
 │   │   ├── db/
-│   │   │   ├── database.ts     # Singleton DB instance
-│   │   │   └── migrations.ts   # ★ Add new schema versions here
-│   │   ├── routes/             # auth, todo, tag, focus, habit, stats
+│   │   │   ├── database.ts     # pg Pool + initDb() + withTransaction()
+│   │   │   └── migrations.ts   # ★ Add new schema versions here (v1–v6)
+│   │   ├── routes/             # auth, todo, tag, focus, habit, stats, analytics
 │   │   ├── controllers/        # Thin HTTP handlers
 │   │   ├── services/           # ★ All business logic
 │   │   ├── middlewares/        # auth, validate, error
@@ -164,7 +168,7 @@ D:\vs\
 │   │   ├── store/              # ★ todo.store, auth.store, habit.store
 │   │   ├── hooks/              # useLocalSync, useKeyboardShortcuts, usePomodoro
 │   │   ├── pages/              # HomePage, AddTodo, EditTodo, Tags, Focus,
-│   │   │                       #   Habits, Calendar, Stats, Login
+│   │   │                       #   Habits, Calendar, Stats, Login, Dashboard
 │   │   ├── components/         # Navbar, TodoCard, SortableTodoCard, TodoForm,
 │   │   │                       #   FilterBar, ConfirmDialog, ProtectedRoute,
 │   │   │                       #   HabitCard, AddHabitModal,
@@ -177,7 +181,7 @@ D:\vs\
 │   └── package.json
 ├── docs/
 │   ├── architecture.md
-│   └── tasks.md                # All 19 phases — fully complete
+│   └── tasks.md                # All 22 phases — fully complete
 ├── CLAUDE.md                   # Commands + architecture quick-reference
 ├── CLAUDE.local.md             # This file — handoff context + gotchas
 ├── docker-compose.yml          # Production compose
@@ -192,6 +196,7 @@ D:\vs\
 | File | What it does |
 |------|-------------|
 | `claude-todo-backend/src/app.ts` | Express entry, routers, export/import endpoints |
+| `claude-todo-backend/src/db/database.ts` | pg Pool, initDb(), withTransaction() |
 | `claude-todo-backend/src/db/migrations.ts` | ★ Add new schema versions here |
 | `claude-todo-backend/src/services/todo.service.ts` | Todo CRUD, filter, reorder, recurring logic |
 | `claude-todo-backend/src/types/index.ts` | Backend source-of-truth types |
@@ -201,4 +206,4 @@ D:\vs\
 | `claude-todo-frontend-ts/src/types/index.ts` | Frontend mirror of backend types |
 | `claude-todo-frontend-ts/src/pages/HomePage.tsx` | Stats, DnD context, FilterBar, todo list |
 | `claude-todo-frontend-ts/src/App.tsx` | Routes, keyboard shortcuts, theme, shortcuts dialog |
-| `docker-compose.yml` | Production compose (backend + frontend + SQLite volume) |
+| `docker-compose.yml` | Production compose (backend + frontend + postgres service) |

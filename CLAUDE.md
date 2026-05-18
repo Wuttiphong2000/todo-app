@@ -16,7 +16,7 @@ npm run dev      # tsx watch — hot-reloads src/app.ts
 npm run build    # tsc compilation → dist/
 npm start        # run compiled dist/app.js
 npm run lint     # ESLint on src/**/*.ts
-npm test         # Jest integration tests (--runInBand, in-memory SQLite)
+npm test         # Jest integration tests (--runInBand; requires DATABASE_URL)
 ```
 
 ### Frontend (`claude-todo-frontend-ts/`)
