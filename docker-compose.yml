@@ -12,7 +12,7 @@ services:
       NODE_ENV: production
       PORT: "3000"
       DB_PATH: /data/todo.db
-      CLIENT_URL: http://localhost
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
       # Required — generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
       JWT_SECRET: ${JWT_SECRET}
     healthcheck:
@@ -28,6 +28,9 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+    environment:
+      PORT: "80"
+      BACKEND_URL: "http://backend:3000"
     depends_on:
       backend:
         condition: service_healthy

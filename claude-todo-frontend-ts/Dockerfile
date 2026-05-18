@@ -11,7 +11,8 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runner
 
 COPY --from=builder /app/dist    /usr/share/nginx/html
-COPY nginx.conf                  /etc/nginx/conf.d/default.conf
+# Template is processed by nginx entrypoint via envsubst (${PORT}, ${BACKEND_URL})
+COPY nginx.conf.template         /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 
