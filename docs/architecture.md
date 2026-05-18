@@ -709,3 +709,112 @@ All browser traffic flows through nginx on port 80. `CLIENT_URL=http://localhost
 
 **SPA routing via nginx**
 `try_files $uri $uri/ /index.html` returns `index.html` for all non-asset paths so React Router handles client-side navigation correctly.
+
+---
+
+## Guest Mode Architecture (Phase 20)
+
+> ให้ผู้เยี่ยมชมใช้แอปได้โดยไม่ต้อง login — ข้อมูลทั้งหมดอยู่ใน localStorage เท่านั้น ไม่มี API call
+
+### Data Flow เปรียบเทียบ
+
+```
+Logged-in User                      Guest User
+─────────────────────────────────   ─────────────────────────────────
+Pages → Zustand Store               Pages → Zustand Store
+             │ API call                          │ localStorage only
+             ▼                                   ▼
+       Express Backend              guest_todos / guest_tags /
+       SQLite (server)              guest_habits / guest_habit_logs
+                                    (browser localStorage)
+```
+
+### isGuest Flag
+
+`auth.store.ts` เพิ่ม `isGuest: boolean` และ `loginAsGuest()`:
+
+```ts
+loginAsGuest: () => {
+  const guestUser = { id: "guest", username: "Guest" }
+  localStorage.setItem("auth_guest", "true")
+  set({ user: guestUser, token: null, isGuest: true })
+}
+```
+
+`hydrate()` อ่าน `auth_guest` key เพื่อ restore guest session เมื่อ reload
+
+### Store Branching Pattern
+
+ทุก action ใน `todo.store.ts` และ `habit.store.ts` ใช้ pattern นี้:
+
+```ts
+fetchTodos: async () => {
+  if (useAuthStore.getState().isGuest) {
+    const cached = localStorage.getItem("guest_todos")
+    set({ todos: cached ? JSON.parse(cached) : [] })
+    return
+  }
+  // ...existing API call logic
+}
+
+createTodo: async (dto) => {
+  if (useAuthStore.getState().isGuest) {
+    const newTodo: Todo = { ...dto, id: nanoid(), createdAt: new Date().toISOString(), ... }
+    set(s => {
+      const todos = [...s.todos, newTodo]
+      localStorage.setItem("guest_todos", JSON.stringify(todos))
+      return { todos }
+    })
+    return
+  }
+  // ...existing API call logic
+}
+```
+
+### localStorage Keys
+
+| Key | เนื้อหา | ใครใช้ |
+|-----|---------|--------|
+| `auth_token` | JWT string | Logged-in user |
+| `auth_user` | JSON user object | Logged-in user |
+| `auth_guest` | `"true"` | Guest session marker |
+| `todo_app_cache` | `{ todos, tags }` snapshot | Logged-in user (useLocalSync) |
+| `guest_todos` | `Todo[]` JSON | Guest |
+| `guest_tags` | `Tag[]` JSON | Guest |
+| `guest_habits` | `Habit[]` JSON | Guest |
+| `guest_habit_logs` | `HabitLog[]` JSON | Guest |
+
+### GuestBanner Component
+
+แสดงเมื่อ `isGuest === true` ใน `App.tsx` เหนือ router outlet:
+
+```tsx
+{isGuest && <GuestBanner />}
+```
+
+ประกอบด้วย:
+- ข้อความเตือนว่าข้อมูลเก็บในเครื่องเท่านั้น
+- ปุ่ม Export → download `guest_todos` + `guest_tags` เป็น JSON
+- ปุ่ม Login → navigate ไป `/login`
+
+### Feature Matrix
+
+| Feature | Logged-in | Guest |
+|---------|-----------|-------|
+| Todo CRUD | ✅ server | ✅ localStorage |
+| Tag CRUD | ✅ server | ✅ localStorage |
+| Habit tracker | ✅ server | ✅ localStorage |
+| Calendar view | ✅ | ✅ (reads local todos) |
+| Focus / Pomodoro | ✅ server | ❌ requires server session |
+| Stats dashboard | ✅ | ⚠️ ข้อมูล limited (no focus stats) |
+| Export | ✅ | ✅ exports localStorage data |
+| Import | ✅ | ✅ imports into localStorage |
+| Data persistence | ✅ permanent | ⚠️ lost if browser data cleared |
+| Cross-device sync | ✅ | ❌ |
+
+### ข้อจำกัด
+
+- **ข้อมูลหายถ้า clear browser data** — guest mode เหมาะสำหรับทดลองใช้เท่านั้น
+- **ไม่ sync ข้ามเครื่อง** — localStorage เป็น per-browser
+- **Focus timer ไม่รองรับ** — session ต้องบันทึกบน server เพื่อความถูกต้องของ stats
+- **ไม่มีการ migrate data อัตโนมัติ** เมื่อ guest สมัครบัญชีจริง — ใช้ Export/Import แทน

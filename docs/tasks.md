@@ -327,3 +327,45 @@
 - [x] **Backend integration tests** — Jest + supertest + ts-jest; in-memory SQLite (`:memory:`); 21 tests across auth (400/401/200), Todo CRUD chain, Tag CRUD + duplicate-name 409
 - [x] **Frontend unit tests** — Vitest + React Testing Library + jsdom; 10 tests: auth store (logout, hydrate expired/valid), ProtectedRoute (redirect/render), TodoCard (title, priority badge, subtask progress)
 - [ ] **E2E tests** — deferred; requires running servers (Playwright setup out of scope for this repo)
+
+---
+
+## Phase 20 — Guest Mode (localStorage-only) 🔜
+
+> ให้ผู้เยี่ยมชมทดลองใช้แอปได้โดยไม่ต้อง login — ข้อมูลทั้งหมดเก็บใน localStorage เครื่องตัวเองเท่านั้น ไม่มีการส่งข้อมูลขึ้น server
+
+### Auth Store
+
+- [ ] เพิ่ม `isGuest: boolean` flag ใน `auth.store.ts`
+- [ ] เพิ่ม `loginAsGuest()` action — set `isGuest = true`, set fake user `{ id: "guest", username: "Guest" }`, persist ใน localStorage key `auth_guest`
+- [ ] `hydrate()` — restore guest session จาก `auth_guest` key (ถ้ามี)
+- [ ] `logout()` — clear guest session และ `guest_todos` / `guest_tags` localStorage keys ด้วย
+
+### Todo & Tag Store (Guest branching)
+
+- [ ] `todo.store.ts` — ทุก action ตรวจ `useAuthStore.getState().isGuest` ก่อน
+  - ถ้า guest: อ่าน/เขียน `guest_todos` / `guest_tags` ใน localStorage โดยตรง (ไม่เรียก API)
+  - ถ้า logged in: ทำงานเหมือนเดิม (เรียก API)
+- [ ] Guest CRUD ใช้ `nanoid()` จาก frontend สร้าง id, timestamps จาก `new Date().toISOString()`
+
+### Habit Store (Guest branching)
+
+- [ ] `habit.store.ts` — same pattern: ถ้า guest เขียน/อ่านจาก `guest_habits` / `guest_habit_logs` ใน localStorage
+
+### LoginPage
+
+- [ ] เพิ่มปุ่ม "ใช้งานในฐานะ Guest" ใต้ login form
+- [ ] คลิก → เรียก `loginAsGuest()` → navigate ไป `/`
+
+### GuestBanner Component
+
+- [ ] `src/components/GuestBanner.tsx` — sticky banner แสดงเมื่อ `isGuest`
+- [ ] ข้อความ: "Guest Mode — ข้อมูลเก็บในเครื่องนี้เท่านั้น ล้าง browser data = ข้อมูลหาย"
+- [ ] ปุ่ม "Export" (download localStorage data เป็น JSON) และ "Login" (redirect ไป `/login`)
+- [ ] เพิ่มใน `App.tsx` ด้านบน router outlet
+
+### Pages — Guest Restrictions
+
+- [ ] `FocusPage` — แสดง "Login เพื่อใช้ Focus Timer (ต้องบันทึก session บน server)" เมื่อ guest
+- [ ] `StatsPage` — แสดง stats จาก localStorage todos ได้บางส่วน (streak / completion) หรือ disable ก็ได้
+- [ ] หน้าอื่น (Home, Add, Edit, Tags, Habits, Calendar) — ทำงานได้ปกติในฐานะ guest
