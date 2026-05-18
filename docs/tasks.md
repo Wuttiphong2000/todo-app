@@ -419,16 +419,39 @@
 
 ---
 
-## Phase 21 — Analytics Dashboard 🔜
+## Phase 21 — Analytics Dashboard ✅
 
 > Dashboard สำหรับ wskt user เท่านั้น — แสดงข้อมูล usage ของแอป
 
-### Backend (พร้อมแล้ว)
+### Backend
 
-- [x] `GET /api/analytics/dashboard` — endpoint พร้อม, คืน `{ registeredUsers, guestVisitsTotal, guestVisitsLast30Days }`
+- [x] `GET /api/analytics/dashboard` — endpoint คืน `{ registeredUsers, guestVisitsTotal, guestVisitsLast30Days }`
 
-### Frontend (ยังไม่ได้ทำ)
+### Frontend
 
-- [ ] **`/dashboard` route** — เพิ่มใน `App.tsx`; ProtectedRoute + ตรวจ `user.username === "wskt"` ถ้าไม่ใช่ redirect ไป `/`
-- [ ] **`DashboardPage`** — เรียก `GET /api/analytics/dashboard`; แสดง stats cards (registered users, guest visits total, guest visits last 30 days)
-- [ ] **Navbar link** — แสดงลิงก์ Dashboard เฉพาะเมื่อ `user.username === "wskt"`
+- [x] **`/dashboard` route** — `App.tsx`; `ProtectedRoute` + `AdminRoute` (redirect non-wskt ไป `/`)
+- [x] **`DashboardPage`** — 3 stats cards (registered users, guest visits total, 30-day visits); loading/error states
+- [x] **Navbar link** — แสดงเฉพาะ `user.username === "wskt"` และไม่ใช่ guest
+
+---
+
+## Phase 22 — Migrate SQLite → PostgreSQL ✅
+
+> เปลี่ยน database เป็น PostgreSQL เพื่อ deploy บน Railway พร้อม persistent storage
+
+### Backend
+
+- [x] เปลี่ยน `better-sqlite3` (sync) → `pg` (async) ใน `package.json`
+- [x] `src/db/database.ts` — export `pool` (pg Pool), `initDb()`, `withTransaction()`
+- [x] `src/db/migrations.ts` — rewrite ทุก migration เป็น PostgreSQL syntax (BOOLEAN, ON CONFLICT DO NOTHING, ALTER TABLE DROP CONSTRAINT)
+- [x] Services ทุกตัว (`todo`, `tag`, `focus`, `habit`, `stats`, `analytics`) — async/await + `$1/$2` placeholders + `pool.query()`
+- [x] Controllers ทุกตัว — async handlers with try/catch
+- [x] `app.ts` — `initDb()` ก่อน `app.listen()`; export/import endpoints เป็น async; ลบ `db` import
+- [x] `Dockerfile` — ลบ `python3 make g++` native build tools (ไม่ต้องใช้กับ pg)
+
+### Infrastructure
+
+- [x] `docker-compose.yml` — เพิ่ม `postgres:16-alpine` service; ลบ `todo_data` SQLite volume; เพิ่ม `postgres_data` volume
+- [x] Deploy บน Railway — เพิ่ม PostgreSQL plugin, link `DATABASE_URL=${{Postgres.DATABASE_URL}}`
+
+> **หมายเหตุ:** integration tests (21 ตัว) ยังใช้ in-memory SQLite setup — ต้องแก้แยกใน phase ถัดไป
