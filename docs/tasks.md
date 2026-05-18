@@ -403,12 +403,19 @@
 - [x] `App.tsx` — เพิ่ม module-level `useAuthStore.getState().hydrate()` แก้ race condition (useLocalSync fetchTodos ทำงานก่อน hydrate ตั้ง isGuest)
 - [x] `client.ts` — Axios 401 interceptor ข้ามการ redirect ไป `/login` ถ้า `auth_guest === "true"` ใน localStorage
 
-### Known Bug 🐛 (ต้องแก้รอบหน้า)
+### Bug ✅ (resolved)
 
-- [ ] **Guest mode ยัง auto-redirect / refresh วนลูปไปหน้า login** — fixes ที่ทำไปยังไม่หายขาด; ต้องสืบต่อว่า trigger มาจากไหน
-  - สิ่งที่น่าสงสัย: `useLocalSync` hook อาจเรียก API ในบาง code path ก่อน `isGuest` พร้อม; double `hydrate()` call (module-level + `useEffect`); หรือมี navigate/redirect อื่นที่ยังไม่ได้แก้
-  - วิธีสืบ: เปิด browser DevTools → Network tab ดู request ที่ return 401; Console tab ดู error; React DevTools ดู re-render ของ `ProtectedRoute`
-  - ไฟล์ที่ต้องดู: `src/hooks/useLocalSync.ts`, `src/store/auth.store.ts` (hydrate), `src/components/ProtectedRoute.tsx`, `src/App.tsx`
+- [x] Guest mode auto-redirect loop — หายเองหลัง fixes ทั้งหมด deploy ขึ้น Railway
+
+### Known Issue 🐛 — Railway data loss (ต้องแก้ด้วยมือบน Railway dashboard)
+
+- [ ] **SQLite data หายทุกครั้งที่ Railway redeploy** — container filesystem เป็น ephemeral; ต้อง mount persistent Volume
+  - **วิธีแก้ (Railway dashboard):**
+    1. ไปที่ backend service → Storage tab → Add Volume
+    2. Mount Path: `/data`
+    3. ไปที่ Variables tab → เพิ่ม `DB_PATH=/data/todo.db`
+    4. Redeploy backend service
+  - **หลังแก้แล้ว:** ข้อมูลจะอยู่ครบแม้ redeploy; Volume จะ persist ตลอดไป
 
 ---
 
