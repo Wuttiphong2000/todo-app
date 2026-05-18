@@ -330,7 +330,25 @@
 
 ---
 
-## Phase 20 — Guest Mode (localStorage-only) 🔜
+## Phase 19b — Railway Deployment ✅
+
+> Deploy ขึ้น Railway แบบ monorepo — 2 services แยกกัน (backend + frontend)
+
+- [x] `claude-todo-backend/railway.toml` — Builder: DOCKERFILE, healthcheck `/health`, restart ON_FAILURE
+- [x] `claude-todo-frontend-ts/railway.toml` — Builder: DOCKERFILE, healthcheck `/`, restart ON_FAILURE
+- [x] `claude-todo-frontend-ts/nginx.conf.template` — ใช้ envsubst แทน static nginx.conf; `${PORT}` สำหรับ listen, `${BACKEND_URL}` สำหรับ proxy_pass; `proxy_ssl_server_name on` สำหรับ HTTPS backend; SPA fallback
+- [x] Frontend `Dockerfile` — เปลี่ยนจาก `COPY nginx.conf` เป็น `COPY nginx.conf.template /etc/nginx/templates/default.conf.template`
+- [x] Backend `Dockerfile` — ลบ `VOLUME ["/data"]` (Railway ไม่รองรับ VOLUME directive)
+- [x] `docker-compose.yml` — เพิ่ม `PORT: "80"` และ `BACKEND_URL: "http://backend:3000"` ใน frontend environment
+- [x] `app.ts` — เพิ่ม `app.set("trust proxy", 1)` สำหรับ Railway reverse proxy (express-rate-limit X-Forwarded-For)
+- [x] Favicon — `to-do-list.png` เพิ่มใน `public/` และ link ใน `index.html`
+
+> **Railway settings ที่ต้อง set ด้วยมือ:** Builder=Dockerfile, Root Directory ต่อ service, env vars (JWT_SECRET, CLIENT_URL, BACKEND_URL)
+> **Volume:** สร้างผ่าน Railway dashboard → mount ที่ `/data` ใน backend service
+
+---
+
+## Phase 20 — Guest Mode (localStorage-only) ✅
 
 > ให้ผู้เยี่ยมชมทดลองใช้แอปได้โดยไม่ต้อง login — ข้อมูลทั้งหมดเก็บใน localStorage เครื่องตัวเองเท่านั้น ไม่มีการส่งข้อมูลขึ้น server
 
@@ -339,7 +357,7 @@
 - [x] เพิ่ม `isGuest: boolean` flag ใน `auth.store.ts`
 - [x] เพิ่ม `loginAsGuest()` action — set `isGuest = true`, set fake user `{ id: "guest", username: "Guest" }`, persist ใน localStorage key `auth_guest`
 - [x] `hydrate()` — restore guest session จาก `auth_guest` key (ถ้ามี)
-- [x] `logout()` — clear guest session และ `guest_todos` / `guest_tags` localStorage keys ด้วย
+- [x] `logout()` — clear guest session และ `guest_todos` / `guest_tags` / `guest_habits` localStorage keys ด้วย
 
 ### Todo & Tag Store (Guest branching) ✅
 
@@ -369,3 +387,34 @@
 - [x] `FocusPage` — แสดง "Login เพื่อใช้ Focus Timer" เมื่อ guest (Focus ต้องบันทึก session บน server)
 - [x] `StatsPage` — แสดง "Login เพื่อดู Statistics" เมื่อ guest
 - [x] หน้าอื่น (Home, Add, Edit, Tags, Habits, Calendar) — ทำงานได้ปกติในฐานะ guest
+
+### Guest Analytics Tracking ✅
+
+- [x] **Migration v6** — `guest_sessions (id, started_at)` table + index
+- [x] **`analyticsService`** — `recordGuestVisit()` (INSERT), `getDashboardStats()` (total + last 30 days count)
+- [x] **`POST /api/analytics/guest-visit`** — public endpoint, fire-and-forget จาก frontend
+- [x] **`GET /api/analytics/dashboard`** — protected endpoint, จำกัดเฉพาะ `username === "wskt"`; returns `{ registeredUsers, guestVisitsTotal, guestVisitsLast30Days }`
+- [x] **`analyticsApi.ts`** — frontend API module สำหรับ `recordGuestVisit()`
+- [x] `loginAsGuest()` — เรียก `analyticsApi.recordGuestVisit()` แบบ fire-and-forget ตอน guest login
+
+### Bug Fixes ✅
+
+- [x] `ProtectedRoute` — แก้ให้ผ่าน route ได้ถ้า `isGuest === true` (ก่อนหน้า block เพราะไม่มี token)
+- [x] `App.tsx` — เพิ่ม module-level `useAuthStore.getState().hydrate()` แก้ race condition (useLocalSync fetchTodos ทำงานก่อน hydrate ตั้ง isGuest)
+- [x] `client.ts` — Axios 401 interceptor ข้ามการ redirect ไป `/login` ถ้า `auth_guest === "true"` ใน localStorage
+
+---
+
+## Phase 21 — Analytics Dashboard 🔜
+
+> Dashboard สำหรับ wskt user เท่านั้น — แสดงข้อมูล usage ของแอป
+
+### Backend (พร้อมแล้ว)
+
+- [x] `GET /api/analytics/dashboard` — endpoint พร้อม, คืน `{ registeredUsers, guestVisitsTotal, guestVisitsLast30Days }`
+
+### Frontend (ยังไม่ได้ทำ)
+
+- [ ] **`/dashboard` route** — เพิ่มใน `App.tsx`; ProtectedRoute + ตรวจ `user.username === "wskt"` ถ้าไม่ใช่ redirect ไป `/`
+- [ ] **`DashboardPage`** — เรียก `GET /api/analytics/dashboard`; แสดง stats cards (registered users, guest visits total, guest visits last 30 days)
+- [ ] **Navbar link** — แสดงลิงก์ Dashboard เฉพาะเมื่อ `user.username === "wskt"`
