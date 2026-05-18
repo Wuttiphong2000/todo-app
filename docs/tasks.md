@@ -403,6 +403,13 @@
 - [x] `App.tsx` — เพิ่ม module-level `useAuthStore.getState().hydrate()` แก้ race condition (useLocalSync fetchTodos ทำงานก่อน hydrate ตั้ง isGuest)
 - [x] `client.ts` — Axios 401 interceptor ข้ามการ redirect ไป `/login` ถ้า `auth_guest === "true"` ใน localStorage
 
+### Known Bug 🐛 (ต้องแก้รอบหน้า)
+
+- [ ] **Guest mode ยัง auto-redirect / refresh วนลูปไปหน้า login** — fixes ที่ทำไปยังไม่หายขาด; ต้องสืบต่อว่า trigger มาจากไหน
+  - สิ่งที่น่าสงสัย: `useLocalSync` hook อาจเรียก API ในบาง code path ก่อน `isGuest` พร้อม; double `hydrate()` call (module-level + `useEffect`); หรือมี navigate/redirect อื่นที่ยังไม่ได้แก้
+  - วิธีสืบ: เปิด browser DevTools → Network tab ดู request ที่ return 401; Console tab ดู error; React DevTools ดู re-render ของ `ProtectedRoute`
+  - ไฟล์ที่ต้องดู: `src/hooks/useLocalSync.ts`, `src/store/auth.store.ts` (hydrate), `src/components/ProtectedRoute.tsx`, `src/App.tsx`
+
 ---
 
 ## Phase 21 — Analytics Dashboard 🔜
