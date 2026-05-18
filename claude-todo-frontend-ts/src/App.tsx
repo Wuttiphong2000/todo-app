@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Navbar from "@/components/Navbar";
+import GuestBanner from "@/components/GuestBanner";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ShortcutsDialog from "@/components/ShortcutsDialog";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -20,6 +21,7 @@ import { ThemeProvider } from "@/context/theme";
 
 function AppShell() {
   useLocalSync();
+  const isGuest = useAuthStore((s) => s.isGuest);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const handleOpenShortcuts = useCallback(() => setShowShortcuts(true), []);
   useKeyboardShortcuts({ onOpenShortcuts: handleOpenShortcuts });
@@ -27,6 +29,7 @@ function AppShell() {
   return (
     <div className="min-h-screen bg-surface-900">
       <Navbar />
+      {isGuest && <GuestBanner />
       <Routes>
         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/add" element={<ProtectedRoute><AddTodoPage /></ProtectedRoute>} />

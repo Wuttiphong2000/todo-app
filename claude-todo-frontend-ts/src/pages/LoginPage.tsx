@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth.store";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, loading, error, user } = useAuthStore();
+  const { login, loginAsGuest, loading, error, user } = useAuthStore();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -17,6 +17,10 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await login(username.trim(), password);
+  };
+
+  const handleGuest = async () => {
+    await loginAsGuest();
   };
 
   return (
@@ -102,6 +106,19 @@ export default function LoginPage() {
             {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 mt-4">
+          <div className="flex-1 h-px bg-surface-700" />
+          <span className="text-xs text-slate-500">หรือ</span>
+          <div className="flex-1 h-px bg-surface-700" />
+        </div>
+
+        <button
+          onClick={handleGuest}
+          className="btn-ghost w-full py-3 text-base mt-4 border border-surface-700"
+        >
+          ใช้งานในฐานะ Guest
+        </button>
       </div>
     </div>
   );
