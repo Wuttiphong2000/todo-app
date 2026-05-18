@@ -23,8 +23,6 @@ COPY --from=builder /app/package.json ./package.json
 
 # Persistent volume for SQLite database
 RUN mkdir -p /data && chown app:app /data
-VOLUME ["/data"]
-
 USER app
 
 EXPOSE 3000
