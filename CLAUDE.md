@@ -2,11 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> For current project state, remaining work, and gotchas, see **[CLAUDE.local.md](CLAUDE.local.md)**.
+> For current project state and gotchas, see **[CLAUDE.local.md](CLAUDE.local.md)**.
 
 ## Project Overview
 
-Full-stack Todo application: an Express/TypeScript REST API (`claude-todo-backend/`) and a React/Vite/TypeScript SPA (`claude-todo-frontend-ts/`). The backend stores data in SQLite via `better-sqlite3` (singleton `DatabaseService`, migrations in `src/db/`).
+Full-stack productivity app (**doable**): an Express/TypeScript REST API (`claude-todo-backend/`) and a React/Vite/TypeScript SPA (`claude-todo-frontend-ts/`). Stores data in SQLite via `better-sqlite3` (singleton `DatabaseService`, versioned migrations in `src/db/`).
 
 ## Commands
 
@@ -16,6 +16,7 @@ npm run dev      # tsx watch — hot-reloads src/app.ts
 npm run build    # tsc compilation → dist/
 npm start        # run compiled dist/app.js
 npm run lint     # ESLint on src/**/*.ts
+npm test         # Jest integration tests (--runInBand, in-memory SQLite)
 ```
 
 ### Frontend (`claude-todo-frontend-ts/`)
@@ -24,38 +25,60 @@ npm run dev      # Vite dev server on port 5173
 npm run build    # tsc check + Vite production build
 npm run preview  # serve production build locally
 npm run lint     # ESLint on src/**/*.{ts,tsx}
+npm test         # Vitest unit tests
 ```
 
 ### Docker
 ```bash
-docker compose up --build   # build + start backend and frontend at http://localhost
+docker compose up --build          # production build — http://localhost
+docker compose up                  # with override: backend hot-reloads via tsx watch
 ```
 
-There are no automated tests in this repo.
+> `docker-compose.override.yml` is auto-applied on `docker compose up` — it bind-mounts
+> `claude-todo-backend/src/` and runs `tsx watch` so backend changes reflect without rebuild.
+> Requires `JWT_SECRET` set in the environment (see `.env.example`).
 
 ## Architecture
 
 ### Backend layers (strict order: route → middleware → controller → service → db)
-- **`src/app.ts`** — entry point; mounts CORS, JSON body parser, `/health`, `/api/export`, and routers
-- **`src/routes/`** — route definitions; attach Zod `validate()` middleware before controllers
-- **`src/controllers/`** — thin HTTP handlers; delegate all logic to services
-- **`src/services/`** — `TodoService` and `TagService` own business logic; both use `db` from `DatabaseService`
-- **`src/db/database.ts`** — singleton `better-sqlite3` instance with PRAGMA setup and migration boot
-- **`src/db/migrations.ts`** — versioned SQL migrations tracked via `schema_migrations` table
-- **`src/middlewares/`** — `validate.middleware.ts` (Zod factory), `error.middleware.ts` (global error + 404 handler)
-- **`src/types/index.ts`** — single source of truth for all TypeScript interfaces and DTOs
+
+- **`src/app.ts`** — entry point; mounts CORS, JSON body parser, all routers; `app.listen` is guarded by `NODE_ENV !== "test"`
+- **`src/routes/`** — route definitions with Zod `validate()` middleware attached before controllers
+  - `auth.routes.ts` — `POST /api/auth/login`, `GET /api/auth/me`
+  - `todo.routes.ts` — full CRUD + reorder + status patch
+  - `tag.routes.ts` — full CRUD
+  - `focus.routes.ts` — session start/end, stats, history
+  - `habit.routes.ts` — CRUD + check-in log/unlog
+  - `stats.routes.ts` — streak + completion trend
+- **`src/controllers/`** — thin HTTP handlers; pass `req.user!.id` to every service call
+- **`src/services/`** — all business logic; `TodoService`, `TagService`, `FocusService`, `HabitService`, `StatsService`
+- **`src/db/database.ts`** — singleton `better-sqlite3` instance; reads `DB_PATH` env var
+- **`src/db/migrations.ts`** — ★ versioned SQL migrations (v1–v5); add new entries here
+- **`src/config/users.ts`** — 2 hardcoded users with bcrypt hashes; throws at module load if `JWT_SECRET` is unset
+- **`src/middlewares/`** — `auth.middleware.ts` (JWT Bearer), `validate.middleware.ts` (Zod factory), `error.middleware.ts` (global AppError + 404)
+- **`src/types/index.ts`** — ★ single source of truth for all TypeScript interfaces and DTOs
 
 ### Frontend layers
-- **`src/store/todo.store.ts`** — Zustand store; owns all async API calls and is the single source of state for todos and tags
-- **`src/api/`** — Axios client with interceptors; `todo.api.ts` and `tag.api.ts` call `/api/*` endpoints (proxied to port 3000 by Vite)
-- **`src/hooks/useLocalSync.ts`** — syncs Zustand state with `localStorage` for offline caching
-- **`src/pages/`** — `HomePage`, `AddTodoPage`, `EditTodoPage` (routed via React Router v6 at `/`, `/add`, `/edit/:id`)
-- **`src/components/`** — presentational components (`TodoCard`, `SortableTodoCard`, `TodoForm`, `FilterBar`, `ConfirmDialog`, `Navbar`)
-- **`src/types/index.ts`** — mirrors backend types; keep in sync manually when changing backend DTOs
+
+- **`src/App.tsx`** — `BrowserRouter` + `AppShell`; mounts `useKeyboardShortcuts`, `ShortcutsDialog`, `ThemeProvider`; calls `hydrate()` on boot
+- **`src/store/`** — Zustand stores (no React Query / SWR):
+  - `todo.store.ts` ★ — all todo + tag async actions, optimistic updates
+  - `auth.store.ts` — login, logout, hydrate (client-side JWT expiry check)
+  - `habit.store.ts` — habit CRUD + log/unlog actions
+- **`src/api/`** — Axios client with Bearer interceptor + 401→logout; `todo.api.ts`, `tag.api.ts`, `focus.api.ts`, `habit.api.ts`, `stats.api.ts`
+- **`src/hooks/`** — `useLocalSync.ts` (localStorage cache), `useKeyboardShortcuts.ts` (N/`/`/`?` shortcuts), `usePomodoro.ts` (Focus timer)
+- **`src/context/theme.tsx`** — `ThemeProvider`; persists `doable-theme` in localStorage; anti-FOUC inline script in `index.html`
+- **`src/pages/`** — `HomePage`, `AddTodoPage`, `EditTodoPage`, `TagsPage`, `FocusPage`, `HabitsPage`, `CalendarPage`, `StatsPage`, `LoginPage`
+- **`src/components/`** — `Navbar`, `TodoCard`, `SortableTodoCard`, `TodoForm`, `FilterBar`, `ConfirmDialog`, `ProtectedRoute`, `HabitCard`, `AddHabitModal`, `CalendarGrid`, `CalendarDayPanel`, `ShortcutsDialog`
+- **`src/types/index.ts`** — ★ mirrors backend types; keep in sync manually when changing backend DTOs
 
 ### Key conventions
-- All API responses use an envelope: `{ success, data, error, message }` — unwrapped automatically by Axios interceptors in `client.ts`
-- IDs are `nanoid`-generated strings (backend uses nanoid v3 / CommonJS; frontend uses nanoid v5 / ESM — do not mix)
-- The Vite proxy (`vite.config.js`) rewrites `/api/*` → `http://localhost:3000/*`, so frontend code never hardcodes the backend port
+
+- All API responses use an envelope: `{ success, data?, error?, message? }` — unwrapped by the Axios interceptor in `client.ts`
+- IDs are `nanoid`-generated strings — backend uses nanoid v3 (CJS), frontend uses nanoid v5 (ESM); do not mix
+- Vite proxy (`vite.config.js`) rewrites `/api/*` → `http://localhost:3000/*`; frontend code never hardcodes the backend port
 - Backend CORS is locked to `CLIENT_URL` env var (default `http://localhost:5173`; Docker uses `http://localhost`)
-- `AppError(statusCode, code, message)` in any service is caught by the global error handler — use it instead of raw `res.status()`
+- `throw new AppError(statusCode, code, message)` anywhere in a service — the global error handler formats the response
+- All protected routes call `requireAuth` middleware, which attaches `req.user` from the JWT payload
+- Filter URL state is synced to query params via `useSearchParams` in `HomePage` — filters survive refresh and are bookmarkable
+- Keyboard shortcuts (`N` new task, `/` search, `?` cheat sheet) are wired globally in `AppShell` via `useKeyboardShortcuts`
