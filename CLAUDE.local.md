@@ -8,7 +8,7 @@ Extended context for anyone continuing work on this repository. Read `CLAUDE.md`
 
 **doable** — a full-stack productivity application built as a learning/showcase project:
 
-- **Backend** — Express + TypeScript REST API with SQLite storage (`claude-todo-backend/`)
+- **Backend** — Express + TypeScript REST API with PostgreSQL storage (`claude-todo-backend/`)
 - **Frontend** — React + Vite + TypeScript SPA with Tailwind dark/light theme (`claude-todo-frontend-ts/`)
 - **Docs** — Architecture and task history (`docs/`)
 - **CI/CD** — GitHub Actions workflows + Docker Compose (`docker-compose.yml`, `.github/workflows/`)

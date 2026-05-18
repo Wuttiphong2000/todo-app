@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Full-stack productivity app (**doable**): an Express/TypeScript REST API (`claude-todo-backend/`) and a React/Vite/TypeScript SPA (`claude-todo-frontend-ts/`). Stores data in SQLite via `better-sqlite3` (singleton `DatabaseService`, versioned migrations in `src/db/`).
+Full-stack productivity app (**doable**): an Express/TypeScript REST API (`claude-todo-backend/`) and a React/Vite/TypeScript SPA (`claude-todo-frontend-ts/`). Stores data in PostgreSQL via `pg` (connection pool, async queries, versioned migrations in `src/db/`).
 
 ## Commands
 
@@ -52,8 +52,8 @@ docker compose up                  # with override: backend hot-reloads via tsx 
   - `stats.routes.ts` — streak + completion trend
 - **`src/controllers/`** — thin HTTP handlers; pass `req.user!.id` to every service call
 - **`src/services/`** — all business logic; `TodoService`, `TagService`, `FocusService`, `HabitService`, `StatsService`
-- **`src/db/database.ts`** — singleton `better-sqlite3` instance; reads `DB_PATH` env var
-- **`src/db/migrations.ts`** — ★ versioned SQL migrations (v1–v5); add new entries here
+- **`src/db/database.ts`** — `pg` connection pool; reads `DATABASE_URL` env var; exports `initDb()` (runs migrations) and `withTransaction(fn)` helper
+- **`src/db/migrations.ts`** — ★ versioned SQL migrations (v1–v6); add new entries here
 - **`src/config/users.ts`** — 2 hardcoded users with bcrypt hashes; throws at module load if `JWT_SECRET` is unset
 - **`src/middlewares/`** — `auth.middleware.ts` (JWT Bearer), `validate.middleware.ts` (Zod factory), `error.middleware.ts` (global AppError + 404)
 - **`src/types/index.ts`** — ★ single source of truth for all TypeScript interfaces and DTOs
