@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.routes.js";
 import focusRoutes from "./routes/focus.routes.js";
 import habitRoutes from "./routes/habit.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
+import analyticsRoutes from "./routes/analytics.routes.js";
 import { statsService } from "./services/stats.service.js";
 import { notFoundHandler, errorHandler } from "./middlewares/error.middleware.js";
 import { requireAuth } from "./middlewares/auth.middleware.js";
@@ -108,6 +109,7 @@ app.use("/api/tags", requireAuth, tagRoutes);
 app.use("/api/focus", requireAuth, focusRoutes);
 app.use("/api/habits", requireAuth, habitRoutes);
 app.use("/api/stats", requireAuth, statsRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // ── Error Handlers (ต้องอยู่ท้ายสุด) ─────────────────────────────────────────
 

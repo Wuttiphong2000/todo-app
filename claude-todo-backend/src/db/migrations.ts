@@ -128,6 +128,16 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_habit_logs_user  ON habit_logs(user_id);
     `,
   },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE IF NOT EXISTS guest_sessions (
+        id         TEXT PRIMARY KEY,
+        started_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_guest_sessions_date ON guest_sessions(started_at);
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {
